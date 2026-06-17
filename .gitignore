@@ -1,0 +1,58 @@
+# Node / frontend
+node_modules/
+gw-studio-tauri/node_modules/
+dist/
+gw-studio-tauri/dist/
+gw-studio-tauri/public/emulators.zip
+
+# Rust / Tauri
+target/
+gw-studio-tauri/src-tauri/target/
+gw-studio-tauri/src-tauri/portable/*.zip
+
+# Local runtime data
+GameWatchBuilderData/
+GWStudioRuntime/
+_portable_tools_stage/
+_portable_sources_stage/
+gw-studio-tauri/src-tauri/target/debug/GameWatchBuilderData/
+gw-studio-tauri/src-tauri/target/release/GameWatchBuilderData/
+
+# Logs and temporary files
+*.log
+.devlogs/
+gw-studio-tauri/.devlogs/
+*.tmp
+*.bak
+
+# Local firmware dumps / test binaries
+backups/
+test_*.bin
+*_backup_test.bin
+internal_flash_backup_test.bin
+test_spi_1mb.bin
+*.rom
+*.ROM
+*.sav
+*.SAV
+*.elf
+*.hex
+*.uf2
+*.map
+game-and-watch-retro-go-sylverb/retro-go-stm32/smsplusgx-go/components/smsplus/coleco_bios.h
+game-and-watch-retro-go-sylverb/caprice32-go/cap32/rom/464.h
+game-and-watch-retro-go-sylverb/caprice32-go/cap32/rom/6128.h
+game-and-watch-retro-go-sylverb/caprice32-go/cap32/rom/6128p.h
+game-and-watch-retro-go-sylverb/caprice32-go/cap32/rom/amsdos.h
+game-and-watch-retro-go-sylverb/caprice32-go/cap32/rom/cpm.h
+
+# Keep lockfiles and source assets tracked.
+!gw-studio-tauri/package-lock.json
+!gw-studio-tauri/src-tauri/Cargo.lock
+
+# OS / editor
+Thumbs.db
+Desktop.ini
+.DS_Store
+.vscode/
+.idea/

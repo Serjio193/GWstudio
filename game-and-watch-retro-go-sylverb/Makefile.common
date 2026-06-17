@@ -1,0 +1,1063 @@
+######################################
+# building variables
+######################################
+# debug build?
+DEBUG ?= 1
+# optimization
+OPT ?= -Og
+
+# Set to 0 to suppress dirty submodule warning
+CHECK_DIRTY_SUBMODULE ?= 1
+
+# Set to 0 to skip tools check
+CHECK_TOOLS ?= 1
+
+# Set to 1 to enable 16MB external flash support. (deprecated, use EXTFLASH_SIZE_MB instead!)
+LARGE_FLASH ?= 0
+
+# Configure where data is stored in the external flash by
+# setting EXTFLASH_OFFSET. Useful if the first 1MB are to be preserved.
+EXTFLASH_OFFSET ?= 0
+
+ifneq ($(shell echo "$$(( $(EXTFLASH_OFFSET) % 4096 ))"), 0)
+$(error Invalid EXTFLASH_OFFSET, should be aligned to a 4KB sector)
+endif
+
+# Configure Game & Watch target device mario|zelda
+ifneq ($(findstring flash,$(MAKECMDGOALS)),flash)
+	GNW_TARGET ?= mario
+endif
+
+OFF_SAVESTATE = 0
+ifeq ($(SHARED_HIBERNATE_SAVESTATE),1)
+	OFF_SAVESTATE = 1
+endif
+
+# Configure Game & Watch target device mario|zelda
+# Set the preprocessor options
+ifeq ($(GNW_TARGET),mario)
+	GNW_TARGET_ZELDA = 0
+	GNW_TARGET_MARIO = 1
+else ifeq ($(GNW_TARGET),zelda)
+	GNW_TARGET_ZELDA = 1
+	GNW_TARGET_MARIO = 0
+else
+$(error Missing or invalid GNW_TARGET option. Valid values {mario|zelda})
+endif
+
+# Disable system logos splash screen at startup
+DISABLE_SPLASH_SCREEN ?= 0
+
+# Default NES emulator is fceumm
+FORCE_NOFRENDO ?= 0 
+NOFRENDO_PARAM := --nofrendo=$(FORCE_NOFRENDO)
+
+# Configure external flash size by setting EXTFLASH_SIZE
+ifeq ($(LARGE_FLASH),1)
+	# 16MB
+	EXTFLASH_SIZE_MB ?= 16
+else
+	# 4MB for Zelda otherwise 1MB
+	ifeq ($(GNW_TARGET),zelda)
+		EXTFLASH_SIZE_MB ?= 4
+	else
+		EXTFLASH_SIZE_MB ?= 1
+	endif
+endif
+
+# Configure INTFLASH_BANK and INTFLASH_ADDRESS
+ifdef INTFLASH_ADDRESS
+INTFLASH_ADDRESS_DECIMAL = $(shell printf "%d" $(INTFLASH_ADDRESS))
+ifdef INTFLASH_BANK
+# defined INTFLASH_ADDRESS INTFLASH_BANK
+# Sanity check that INTFLASH_ADDRESS and INTFLASH_BANK agree
+ifeq ($(shell [ $(INTFLASH_ADDRESS_DECIMAL) -ge 134217728 -a $(INTFLASH_ADDRESS_DECIMAL) -lt 135266304 ] && echo true),true)
+# INTFLASH_ADDRESS is in range [0x08000000, 0x08100000)
+ifneq ($(INTFLASH_BANK),1)
+$(error Inconsistent INTFLASH_BANK=$(INTFLASH_BANK) and INTFLASH_ADDRESS=$(INTFLASH_ADDRESS))
+endif
+else
+ifneq ($(INTFLASH_BANK),2)
+$(error Inconsistent INTFLASH_BANK=$(INTFLASH_BANK) and INTFLASH_ADDRESS=$(INTFLASH_ADDRESS))
+endif
+endif
+else  # ifdef INTFLASH_BANK
+# defined INTFLASH_ADDRESS; not defined INTFLASH_BANK
+# Derive flashbank from INTFLASH_ADDRESS
+ifeq ($(shell [ $(INTFLASH_ADDRESS_DECIMAL) -ge 134217728 -a $(INTFLASH_ADDRESS_DECIMAL) -lt 135266304 ] && echo true),true)
+# INTFLASH_ADDRESS is in range [0x08000000, 0x08100000)
+INTFLASH_BANK = 1
+else
+INTFLASH_BANK = 2
+endif
+endif
+else # ifdef INTFLASH_ADDRESS
+ifdef INTFLASH_BANK
+# not defined INTFLASH_ADDRESS; defined INTFLASH_BANK
+ifeq ($(INTFLASH_BANK),1)
+INTFLASH_ADDRESS = 0x08000000
+else
+INTFLASH_ADDRESS = 0x08100000
+endif
+else  # ifdef INTFLASH_BANK
+# not defined INTFLASH_ADDRESS INTFLASH_BANK
+INTFLASH_ADDRESS = 0x08000000
+INTFLASH_BANK = 1
+endif
+endif
+
+GNWMANAGER = gnwmanager
+
+# Configure external flash size in MB (Megabytes)
+EXTFLASH_SIZE_MB ?= 1
+BIG_BANK ?= 1
+
+EXTFLASH_SIZE ?= $(shell echo "$$(( $(EXTFLASH_SIZE_MB) * 1024 * 1024 ))")
+
+ifneq ($(shell echo "$$(( $(EXTFLASH_SIZE) % 4096 ))"), 0)
+$(error Invalid EXTFLASH_SIZE, should be aligned to a 4KB sector)
+endif
+
+EXTFLASH_FORCE_SPI ?= 0
+
+# Set to 0 to remove state saving support (uses less space)
+STATE_SAVING ?= 1
+ifeq ($(STATE_SAVING),0)
+	SAVE_PARAM := --no-save
+endif
+
+# Screenshot support allocates 150kB of external flash. Disabled by default.
+ENABLE_SCREENSHOT ?= 0
+# Set to 1 to add game genie support
+CHEAT_CODES ?= 0
+ifeq ($(GAME_GENIE),1)
+	CHEAT_CODES = 1
+endif
+
+# Compress supported ROMs by default. Set to 0 to disable.
+COMPRESS ?= lzma
+ifeq ($(COMPRESS),0)
+	COMPRESS_PARAM :=
+else
+	COMPRESS_PARAM := --compress=$(COMPRESS)
+endif
+
+# Reset the DBGMCU configuration register (DBGMCU_CR) after flashing
+# Set to 0 to keep the clocks running when suspended (makes debugging easier)
+RESET_DBGMCU ?= 1
+ifeq ($(RESET_DBGMCU),1)
+	RESET_DBGMCU_CMD = $(MAKE) reset_dbgmcu
+else
+	RESET_DBGMCU_CMD = $(MAKE) reset_mcu
+endif
+
+PYTHON3 ?= /usr/bin/env python3
+
+#######################################
+# paths
+#######################################
+# Build path
+BUILD_DIR ?= build
+
+#######################################
+# i18n Codepage
+#######################################
+CODEPAGE ?= 1252
+
+ES_ES ?= 1
+PT_PT ?= 1
+FR_FR ?= 1
+IT_IT ?= 1
+RU_RU ?= 1
+DE_DE ?= 1
+ZH_CN ?= 0
+ZH_TW ?= 0
+KO_KR ?= 0
+JA_JP ?= 0
+
+SCODEPAGE = "ascii"
+
+ifeq ($(CODEPAGE), 936)
+	SCODEPAGE = "gbk"
+	ZH_CN = 1
+else ifeq ($(CODEPAGE), 950)
+	SCODEPAGE = "big5"
+	ZH_TW = 1
+else ifeq ($(CODEPAGE), 932)
+	SCODEPAGE = "eucjp"
+	JA_JP = 1
+else ifeq ($(CODEPAGE), 949)
+	KO_KR = 1
+	SCODEPAGE = "euckr"
+else ifeq ($(CODEPAGE), 12511)
+	RU_RU = 1
+	SCODEPAGE = "windows-1251"
+else ifeq ($(CODEPAGE), 12521)
+	ES_ES = 1
+	SCODEPAGE = "iso-8859-1"
+else ifeq ($(CODEPAGE), 12522)
+	PT_PT = 1
+	SCODEPAGE = "iso-8859-1"
+else ifeq ($(CODEPAGE), 12523)
+	FR_FR = 1
+	SCODEPAGE = "iso-8859-1"
+else ifeq ($(CODEPAGE), 12524)
+	IT_IT = 1
+	SCODEPAGE = "iso-8859-1"
+else ifeq ($(CODEPAGE), 12521)
+	RU_RU = 1
+	SCODEPAGE = "iso-8859-5"
+else ifeq ($(CODEPAGE), 12525)
+	DE_DE = 1
+	SCODEPAGE = "iso-8859-1"
+else
+    SCODEPAGE = "iso-8859-1"
+endif
+
+UICODEPAGE ?= CODEPAGE
+ifeq ($(UICODEPAGE), 936)
+	ZH_CN = 1
+else ifeq ($(UICODEPAGE), 950)
+	ZH_TW = 1
+else ifeq ($(UICODEPAGE), 932)
+	JA_JP = 1
+else ifeq ($(UICODEPAGE), 949)
+	KO_KR = 1
+else ifeq ($(UICODEPAGE), 12521)
+	ES_ES = 1
+else ifeq ($(UICODEPAGE), 12522)
+	PT_PT = 1
+else ifeq ($(UICODEPAGE), 12523)
+	FR_FR = 1
+else ifeq ($(UICODEPAGE), 12524)
+	IT_IT = 1
+else ifeq ($(UICODEPAGE), 12521)
+	RU_RU = 1
+else ifeq ($(UICODEPAGE), 12525)
+	DE_DE = 1
+endif
+
+ROMINFOCODE ?= $(SCODEPAGE)
+CODEPAGE_PARAM := --codepage=$(ROMINFOCODE)
+
+
+#######################################
+# MSX
+#######################################
+MSX_USE_BANK_2 ?= 0
+
+#######################################
+# cover flow
+#######################################
+COVERFLOW ?= 0
+
+ifdef COVERFLOW
+	COVERFLOW_PARAM := --coverflow=$(COVERFLOW)
+endif
+
+JPG_QUALITY ?= 90
+JPG_QUALITY_PARAM := --jpg_quality=$(JPG_QUALITY)
+
+# Common C sources
+C_SOURCES +=  \
+retro-go-stm32/retro-go/main/gui.c \
+Core/Src/porting/gw_alloc.c \
+Core/Src/retro-go/rg_main.c \
+Core/Src/retro-go/rg_rtc.c \
+Core/Src/retro-go/rg_emulators.c \
+Core/Src/retro-go/rom_manager.c \
+Core/Src/porting/odroid_settings.c \
+Core/Src/retro-go/i18n/rg_i18n.c \
+Core/Src/retro-go/rg_logos.c
+
+# Version and URL for the STM32CubeH7 SDK
+SDK_VERSION ?= v1.8.0
+SDK_URL ?= https://raw.githubusercontent.com/STMicroelectronics/STM32CubeH7
+
+# Local path for the SDK
+SDK_DIR ?= Drivers
+
+
+# SDK C sources
+SDK_C_SOURCES =  \
+Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_adc.c \
+Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_adc_ex.c \
+Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_cortex.c \
+Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_dac_ex.c \
+Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_dac.c \
+Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_dma_ex.c \
+Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_dma.c \
+Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_dma2d.c \
+Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_exti.c \
+Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_flash_ex.c \
+Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_flash.c \
+Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_gpio.c \
+Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_hsem.c \
+Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_i2c_ex.c \
+Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_i2c.c \
+Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_jpeg.c \
+Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_ltdc_ex.c \
+Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_ltdc.c \
+Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_mdma.c \
+Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_ospi.c \
+Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_pwr_ex.c \
+Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_pwr.c \
+Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_rcc_ex.c \
+Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_rcc.c \
+Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_rtc_ex.c \
+Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_rtc.c \
+Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_sai_ex.c \
+Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_sai.c \
+Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_spi_ex.c \
+Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_spi.c \
+Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_tim_ex.c \
+Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_tim.c \
+Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_wwdg.c \
+Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal.c \
+
+
+# SDK ASM sources
+SDK_ASM_SOURCES =  \
+Drivers/CMSIS/Device/ST/STM32H7xx/Source/Templates/gcc/startup_stm32h7b0xx.s \
+Core/Src/memcpy-armv7m.s
+
+# SDK headers
+SDK_HEADERS = \
+Drivers/CMSIS/Device/ST/STM32H7xx/Include/stm32h7b0xx.h \
+Drivers/CMSIS/Device/ST/STM32H7xx/Include/stm32h7xx.h \
+Drivers/CMSIS/Device/ST/STM32H7xx/Include/system_stm32h7xx.h \
+Drivers/CMSIS/Include/cmsis_compiler.h \
+Drivers/CMSIS/Include/cmsis_gcc.h \
+Drivers/CMSIS/Include/cmsis_version.h \
+Drivers/CMSIS/Include/core_cm7.h \
+Drivers/CMSIS/Include/mpu_armv7.h \
+Drivers/STM32H7xx_HAL_Driver/Inc/Legacy/stm32_hal_legacy.h \
+Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_ll_adc.h \
+Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_adc.h \
+Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_adc_ex.h \
+Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_cortex.h \
+Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_dac_ex.h \
+Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_dac.h \
+Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_def.h \
+Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_dma_ex.h \
+Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_dma.h \
+Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_dma2d.h \
+Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_exti.h \
+Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_flash_ex.h \
+Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_flash.h \
+Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_gpio_ex.h \
+Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_gpio.h \
+Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_hsem.h \
+Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_i2c_ex.h \
+Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_i2c.h \
+Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_jpeg.h \
+Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_ltdc_ex.h \
+Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_ltdc.h \
+Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_mdma.h \
+Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_ospi.h \
+Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_pwr_ex.h \
+Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_pwr.h \
+Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_rcc_ex.h \
+Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_rcc.h \
+Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_rtc_ex.h \
+Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_rtc.h \
+Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_sai_ex.h \
+Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_sai.h \
+Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_spi_ex.h \
+Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_spi.h \
+Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_tim.h \
+Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_tim_ex.h \
+Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_wwdg.h \
+Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal.h \
+
+
+#######################################
+# binaries
+#######################################
+PREFIX = arm-none-eabi-
+# The gcc compiler bin path can be either defined in make command via GCC_PATH variable (> make GCC_PATH=xxx)
+# either it can be added to the PATH environment variable.
+ifdef GCC_PATH
+CC   = $(GCC_PATH)/$(PREFIX)gcc
+AS   = $(GCC_PATH)/$(PREFIX)gcc -x assembler-with-cpp
+CP   = $(GCC_PATH)/$(PREFIX)objcopy
+SZ   = $(GCC_PATH)/$(PREFIX)size
+GDB  = $(GCC_PATH)/$(PREFIX)gdb
+DUMP = $(GCC_PATH)/$(PREFIX)objdump
+else
+CC   = $(PREFIX)gcc
+AS   = $(PREFIX)gcc -x assembler-with-cpp
+CP   = $(PREFIX)objcopy
+SZ   = $(PREFIX)size
+GDB  = $(PREFIX)gdb
+DUMP = $(PREFIX)objdump
+endif
+
+HEX   = $(CP) -O ihex
+BIN   = $(CP) -O binary -S
+ECHO  = echo
+TOUCH = touch
+
+#######################################
+# CFLAGS
+#######################################
+# cpu
+CPU = -mcpu=cortex-m7 -mtune=cortex-m7
+
+# fpu
+FPU = -mfpu=fpv5-d16
+
+# float-abi
+FLOAT-ABI = -mfloat-abi=hard
+
+# mcu
+MCU = $(CPU) -mthumb -mno-unaligned-access $(FPU) $(FLOAT-ABI)
+
+# macros for gcc
+# AS defines
+AS_DEFS +=
+
+# C defines
+C_DEFS +=  \
+-D_GNU_SOURCE \
+-DINTFLASH_BANK=$(INTFLASH_BANK) \
+-DINTFLASH_ADDRESS=$(INTFLASH_ADDRESS) \
+-DBIG_BANK=$(BIG_BANK) \
+-DEXTFLASH_SIZE=$(EXTFLASH_SIZE) \
+-DMSX_USE_BANK_2=$(MSX_USE_BANK_2) \
+-DOFF_SAVESTATE=$(OFF_SAVESTATE) \
+-DCODEPAGE=$(CODEPAGE) \
+-DUICODEPAGE=$(UICODEPAGE) \
+-DINCLUDED_ES_ES=$(ES_ES) \
+-DINCLUDED_PT_PT=$(PT_PT) \
+-DINCLUDED_FR_FR=$(FR_FR) \
+-DINCLUDED_IT_IT=$(IT_IT) \
+-DINCLUDED_DE_DE=$(DE_DE) \
+-DINCLUDED_RU_RU=$(RU_RU) \
+-DINCLUDED_ZH_CN=$(ZH_CN) \
+-DINCLUDED_ZH_TW=$(ZH_TW) \
+-DINCLUDED_KO_KR=$(KO_KR) \
+-DINCLUDED_JA_JP=$(JA_JP) \
+-DLANG=$(LANG) \
+-DCOVERFLOW=$(COVERFLOW) \
+-DEXTFLASH_FORCE_SPI=$(EXTFLASH_FORCE_SPI) \
+-DUSE_HAL_DRIVER \
+-DSTM32H7B0xx \
+-DIS_LITTLE_ENDIAN \
+-DMINIZ_NO_MALLOC \
+-DMINIZ_NO_ZLIB_APIS \
+-DDEBUG_RG_ALLOC \
+-DSTATE_SAVING=$(STATE_SAVING) \
+-DENABLE_SCREENSHOT=$(ENABLE_SCREENSHOT) \
+-DGNW_TARGET_MARIO=$(GNW_TARGET_MARIO) \
+-DGNW_TARGET_ZELDA=$(GNW_TARGET_ZELDA) \
+-DCHEAT_CODES=$(CHEAT_CODES) \
+-DFORCE_NOFRENDO=$(FORCE_NOFRENDO) \
+-DDISABLE_SPLASH_SCREEN=$(DISABLE_SPLASH_SCREEN) \
+-DTARGET_GNW \
+-DNO_EMBEDDED_SAMPLES \
+-D__LIBRETRO__ \
+-DZ80_CUSTOM_CONFIGURATION \
+-DMSX_NO_ZIP \
+-DMSX_NO_FILESYSTEM \
+-DMSX_NO_MALLOC \
+-DMAX_VIDEO_WIDTH_320 \
+-DPIXEL_WIDTH=8 \
+-DMSX_NO_STEREO \
+-DFCEU_VERSION_NUMERIC=9813 \
+-DFCEU_LOW_RAM \
+-DFCEU_NO_MALLOC \
+
+# AS includes
+AS_INCLUDES +=
+
+# C includes
+C_INCLUDES +=  \
+-ICore/Inc \
+-ICore/Inc/porting \
+-ICore/Inc/porting/gb \
+-ICore/Inc/porting/nes \
+-ICore/Inc/porting/nes_fceu \
+-ICore/Inc/porting/smsplusgx \
+-ICore/Inc/porting/pce \
+-ICore/Inc/porting/msx \
+-ICore/Inc/porting/wsv \
+-ICore/Inc/porting/gw \
+-ICore/Inc/porting/gwenesis \
+-ICore/Inc/porting/a7800 \
+-ICore/Inc/porting/tama \
+-ICore/Inc/retro-go \
+-IDrivers/STM32H7xx_HAL_Driver/Inc \
+-IDrivers/STM32H7xx_HAL_Driver/Inc/Legacy \
+-IDrivers/CMSIS/Device/ST/STM32H7xx/Include \
+-IDrivers/CMSIS/Include \
+-Iretro-go-stm32/components/lupng \
+
+# Force include the configuration
+CFLAGS += $(CFLAGS_EXTRA) -include $(BUILD_DIR)/config.h
+
+# compile gcc flags
+ASFLAGS += $(MCU) $(AS_DEFS) $(AS_INCLUDES) $(OPT) -Wall -fdata-sections -ffunction-sections
+
+CFLAGS += $(MCU) $(C_DEFS) $(C_INCLUDES) $(OPT) -Wall -fdata-sections -ffunction-sections
+
+ifeq ($(DEBUG), 1)
+CFLAGS += -g -gdwarf-2
+endif
+
+CFLAGS += -fstack-usage -Wstack-usage=20480
+
+# Generate dependency information
+CFLAGS += -MMD -MP -MF"$(@:%.o=%.d)"
+
+LDFLAGS += -Wl,--defsym=__EXTFLASH_OFFSET__=$(EXTFLASH_OFFSET)
+LDFLAGS += -Wl,--defsym=__EXTFLASH_TOTAL_LENGTH__=$(EXTFLASH_SIZE)
+LDFLAGS += -Wl,--defsym=ENABLE_SCREENSHOT=$(ENABLE_SCREENSHOT)
+
+LDFLAGS += -Wl,--defsym=__INTFLASH__=$(INTFLASH_ADDRESS)
+
+ifeq ($(BIG_BANK), 1)
+	FLASH_LENGTH = 256k
+else
+	FLASH_LENGTH = 128k
+endif
+
+LDFLAGS += -Wl,--defsym=__FLASH_LENGTH__=$(FLASH_LENGTH)
+
+#######################################
+# LDFLAGS
+#######################################
+# link script
+LDSCRIPT ?= STM32H7B0VBTx_FLASH.ld
+
+# libraries
+LIBS = -lc -lm -lnosys
+LIBDIR +=
+LDFLAGS += $(MCU) -specs=nano.specs -T$(LDSCRIPT) $(LIBDIR) $(LIBS) -Wl,-Map=$(BUILD_DIR)/$(TARGET).map,--cref -Wl,--gc-sections
+
+# default action: build all
+all: CheckTools CheckDirtySubmodules $(BUILD_DIR) $(BUILD_DIR)/$(TARGET).elf $(BUILD_DIR)/$(TARGET)_extflash.bin $(BUILD_DIR)/$(TARGET)_intflash.bin $(BUILD_DIR)/$(TARGET)_intflash2.bin
+
+#######################################
+# build the application
+#######################################
+# list of objects
+OBJECTS = $(addprefix $(BUILD_DIR)/core/,$(notdir $(C_SOURCES:.c=.o) $(SDK_C_SOURCES:.c=.o)))
+GNUBOY_OBJECTS = $(addprefix $(BUILD_DIR)/gnuboy/,$(notdir $(GNUBOY_C_SOURCES:.c=.o)))
+NES_OBJECTS = $(addprefix $(BUILD_DIR)/nes/,$(notdir $(NES_C_SOURCES:.c=.o)))
+NES_FCEU_OBJECTS = $(addprefix $(BUILD_DIR)/nes_fceu/,$(notdir $(NES_FCEU_C_SOURCES:.c=.o)))
+SMSPLUSGX_OBJECTS = $(addprefix $(BUILD_DIR)/smsplusgx/,$(notdir $(SMSPLUSGX_C_SOURCES:.c=.o)))
+PCE_OBJECTS = $(addprefix $(BUILD_DIR)/pce/,$(notdir $(PCE_C_SOURCES:.c=.o)))
+GW_OBJECTS = $(addprefix $(BUILD_DIR)/gw/,$(notdir $(GW_C_SOURCES:.c=.o)))
+MSX_OBJECTS = $(addprefix $(BUILD_DIR)/msx/,$(notdir $(MSX_C_SOURCES:.c=.o)))
+WSV_OBJECTS = $(addprefix $(BUILD_DIR)/wsv/,$(notdir $(WSV_C_SOURCES:.c=.o)))
+MD_OBJECTS = $(addprefix $(BUILD_DIR)/md/,$(notdir $(MD_C_SOURCES:.c=.o)))
+A7800_OBJECTS = $(addprefix $(BUILD_DIR)/a7800/,$(notdir $(A7800_C_SOURCES:.c=.o)))
+TAMA_OBJECTS = $(addprefix $(BUILD_DIR)/tama/,$(notdir $(TAMA_C_SOURCES:.c=.o)))
+
+vpath %.c $(sort $(dir $(C_SOURCES) $(NES_C_SOURCES) $(NES_FCEU_C_SOURCES) $(GNUBOY_C_SOURCES) $(SMSPLUSGX_C_SOURCES) $(PCE_C_SOURCES) $(MSX_C_SOURCES) $(GW_C_SOURCES) $(WSV_C_SOURCES) $(MD_C_SOURCES) $(A7800_C_SOURCES) $(TAMA_C_SOURCES) $(SDK_C_SOURCES)))
+# list of ASM program objects
+OBJECTS += $(addprefix $(BUILD_DIR)/,$(notdir $(SDK_ASM_SOURCES:.s=.o)))
+vpath %.s $(sort $(dir $(SDK_ASM_SOURCES)))
+
+OBJECTS += $(addprefix $(BUILD_DIR)/,roms.a)
+
+# function used to generate prerequisite rules for SDK objects
+define sdk_obj_prereq_gen
+$(BUILD_DIR)/$(patsubst %.c,%.o,$(patsubst %.s,%.o,$(notdir $1))): $1
+
+endef
+# note: the blank line above is intentional
+
+# generate all object prerequisite rules
+$(eval $(foreach obj,$(SDK_C_SOURCES) $(SDK_ASM_SOURCES),$(call sdk_obj_prereq_gen,$(obj))))
+
+FORCE:
+
+Core/Inc/githash.h: FORCE | $(BUILD_DIR)
+	$(V)./scripts/update_githash.sh $@
+
+$(BUILD_DIR)/core/main.o: Core/Inc/githash.h
+$(BUILD_DIR)/core/flashapp.o: Core/Inc/githash.h
+$(BUILD_DIR)/core/rg_main.o: Core/Inc/githash.h
+
+# Run parse_roms.py to generate information about the roms
+$(BUILD_DIR)/rom_files.txt: FORCE | $(BUILD_DIR)
+	$(V)$(ECHO) [ BASH ] Checking for updated roms
+	$(V)./scripts/update_rom_files.sh build/rom_files.txt roms/gb roms/nes roms/sms roms/gg roms/col roms/pce roms/sg roms/msx roms/gw roms/wsv roms/md roms/a7800 roms/tama
+
+$(BUILD_DIR)/roms.a: $(BUILD_DIR)/rom_files.txt parse_roms.py
+	$(V)$(ECHO) [ PYTHON3 ] $(notdir $<)
+	$(V)$(PYTHON3) parse_roms.py --flash-size $(EXTFLASH_SIZE) $(SAVE_PARAM) $(COMPRESS_PARAM) $(CODEPAGE_PARAM) $(COVERFLOW_PARAM) $(JPG_QUALITY_PARAM) $(NOFRENDO_PARAM) --off_saveflash=$(OFF_SAVESTATE)
+
+$(BUILD_DIR)/config.h $(BUILD_DIR)/saveflash.ld $(BUILD_DIR)/cacheflash.ld $(BUILD_DIR)/offsaveflash.ld &: $(BUILD_DIR)/roms.a
+	$(V)/bin/sh -c true
+STM32H7B0VBTx_FLASH.ld: $(BUILD_DIR)/offsaveflash.ld $(BUILD_DIR)/saveflash.ld $(BUILD_DIR)/cacheflash.ld
+
+# rom_manager.c depends on the different *_roms.c files but they only change when roms.a changes
+$(BUILD_DIR)/core/rom_manager.o: Core/Src/retro-go/rom_manager.c $(BUILD_DIR)/roms.a
+
+ifeq (${CHECK_DIRTY_SUBMODULE},1)
+CheckDirtySubmodules:
+	$(V)git submodule foreach "git diff --quiet" 2> /dev/null || \
+		(echo -e "\n\n\nYou have changes in the submodule. This is not normal.\nPlease clean the submodule by running 'git submodule update --init'\n\n(You may set CHECK_DIRTY_SUBMODULE=0 to suppress this warning)\n\n\n" && exit 1)
+	$(V)git submodule status | grep -v '+' 2> /dev/null > /dev/null || \
+		(echo -e "\n\n\nYou are using a submodule that is not updated.\nPlease sync the submodules by running 'git submodule update --init'\n\n(You may set CHECK_DIRTY_SUBMODULE=0 to suppress this warning)\n\n\n" && exit 1)
+else
+CheckDirtySubmodules:
+endif
+.PHONY: CheckDirtySubmodules
+
+ifeq (${CHECK_TOOLS},1)
+CheckTools:
+	@# Check that the tools in the toolchain exist
+	$(V)/usr/bin/env bash -c " \
+		for tool in $(CC) $(CP) $(SZ) $(GDB) $(DUMP); do \
+		which \$$tool 2> /dev/null > /dev/null || \
+		( \
+			echo -e \"\nCannot find \$$tool\n\" && \
+			exit 1 \
+		) \
+		done"
+
+	@# Check that GCC version 10 or higher is used
+	$(V)$(CC) -v 2>&1 | grep "gcc version 1[0-9]" > /dev/null || \
+		( \
+			echo -e "\n\n\nPlease use GCC version 10 or higher.\n\n\nYou are using:" && \
+			$(CC) -v 2>&1 | grep "gcc version" ; \
+			echo -e "\n\n\n" && \
+			exit 1 \
+		)
+
+	$(V)$(CP) --info | grep "elf32-littlearm" > /dev/null || \
+		( \
+			echo -e "\n\n\n$(CP) does not suport elf32-littlearm.\nPlease install a toolchain that supports elf32-littlearm and armv7e-m.\n\n\n" && \
+			exit 1 \
+		)
+
+	$(V)$(DUMP) --help | grep "armv7e-m" > /dev/null || \
+		( \
+			echo -e "\n\n\nobjdump does not suport armv7e-m.\nPlease install a toolchain that supports elf32-littlearm and armv7e-m.\n\n\n" && \
+			exit 1 \
+		)
+
+	$(V)$(PYTHON3) scripts/python_version_check.py
+
+else
+CheckTools:
+endif
+.PHONY: CheckTools
+
+$(BUILD_DIR)/%.o: %.s Makefile.common Makefile $(BUILD_DIR)/config.h | $(BUILD_DIR)
+	$(V)$(ECHO) [ AS ] $(notdir $<)
+	$(V)$(AS) -c $(CFLAGS) $< -o $@
+
+$(BUILD_DIR)/$(TARGET).elf: $(OBJECTS) $(A7800_OBJECTS) $(NES_OBJECTS) $(NES_FCEU_OBJECTS) $(GNUBOY_OBJECTS) $(SMSPLUSGX_OBJECTS) $(PCE_OBJECTS) $(MSX_OBJECTS) $(GW_OBJECTS) $(WSV_OBJECTS) $(MD_OBJECTS) $(TAMA_OBJECTS) Makefile.common Makefile $(LDSCRIPT)
+	$(V)$(ECHO) [ LD ] $(notdir $@)
+	$(V)$(CC) $(OBJECTS) $(A7800_OBJECTS) $(NES_OBJECTS) $(NES_FCEU_OBJECTS) $(GNUBOY_OBJECTS) $(SMSPLUSGX_OBJECTS) $(PCE_OBJECTS) $(MSX_OBJECTS) $(GW_OBJECTS) $(WSV_OBJECTS) $(MD_OBJECTS) $(TAMA_OBJECTS) $(LDFLAGS) -o $@
+	$(V)./scripts/extflash_size.sh $@
+
+$(BUILD_DIR)/core/%.o: %.c Makefile.common Makefile $(SDK_HEADERS) $(BUILD_DIR)/config.h | $(BUILD_DIR)
+	$(V)$(ECHO) [ CC core ] $(notdir $<)
+	$(V)$(CC) -c $(CFLAGS) -Wa,-a,-ad,-alms=$(BUILD_DIR)/core/$(notdir $(<:.c=.lst)) $< -o $@
+
+$(BUILD_DIR)/nes/%.o: %.c Makefile.common Makefile $(SDK_HEADERS) $(BUILD_DIR)/config.h | $(BUILD_DIR)
+	$(V)$(ECHO) [ CC nes ] $(notdir $<)
+	$(V)$(CC) -c $(CFLAGS) $(NES_C_INCLUDES) -Wa,-a,-ad,-alms=$(BUILD_DIR)/nes/$(notdir $(<:.c=.lst)) $< -o $@
+
+$(BUILD_DIR)/nes_fceu/%.o: %.c Makefile.common Makefile $(SDK_HEADERS) $(BUILD_DIR)/config.h | $(BUILD_DIR)
+	$(V)$(ECHO) [ CC nes-fceu ] $(notdir $<)
+	$(V)$(CC) -c $(CFLAGS) $(NES_FCEU_C_INCLUDES) -Wno-sequence-point -Wno-parentheses -Wa,-a,-ad,-alms=$(BUILD_DIR)/nes_fceu/$(notdir $(<:.c=.lst)) $< -o $@
+
+$(BUILD_DIR)/gnuboy/%.o: %.c Makefile.common Makefile $(SDK_HEADERS) $(BUILD_DIR)/config.h | $(BUILD_DIR)
+	$(V)$(ECHO) [ CC gb ] $(notdir $<)
+	$(V)$(CC) -c $(CFLAGS) $(GNUBOY_C_INCLUDES) -Wa,-a,-ad,-alms=$(BUILD_DIR)/gnuboy/$(notdir $(<:.c=.lst)) $< -o $@
+
+$(BUILD_DIR)/smsplusgx/%.o: %.c Makefile.common Makefile $(SDK_HEADERS) $(BUILD_DIR)/config.h | $(BUILD_DIR)
+	$(V)$(ECHO) [ CC sms ] $(notdir $<)
+	$(V)$(CC) -c $(CFLAGS) $(SMSPLUSGX_C_INCLUDES) -Wa,-a,-ad,-alms=$(BUILD_DIR)/smsplusgx/$(notdir $(<:.c=.lst)) $< -o $@
+
+$(BUILD_DIR)/pce/%.o: %.c Makefile.common Makefile $(SDK_HEADERS) $(BUILD_DIR)/config.h | $(BUILD_DIR)
+	$(V)$(ECHO) [ CC pce ] $(notdir $<)
+	$(V)$(CC) -c $(CFLAGS) $(PCE_C_INCLUDES) -Wa,-a,-ad,-alms=$(BUILD_DIR)/pce/$(notdir $(<:.c=.lst)) $< -o $@
+
+$(BUILD_DIR)/msx/%.o: %.c Makefile.common Makefile $(SDK_HEADERS) $(BUILD_DIR)/config.h | $(BUILD_DIR)
+	$(V)$(ECHO) [ CC msx ] $(notdir $<)
+	$(V)$(CC) -c $(CFLAGS) $(MSX_C_INCLUDES) -Wa,-a,-ad,-alms=$(BUILD_DIR)/msx/$(notdir $(<:.c=.lst)) $< -o $@
+
+$(BUILD_DIR)/gw/%.o: %.c Makefile.common Makefile $(SDK_HEADERS) $(BUILD_DIR)/config.h | $(BUILD_DIR)
+	$(V)$(ECHO) [ CC gw ] $(notdir $<)
+	$(V)$(CC) -c $(CFLAGS) $(GW_C_INCLUDES) -Wa,-a,-ad,-alms=$(BUILD_DIR)/gw/$(notdir $(<:.c=.lst)) $< -o $@
+
+$(BUILD_DIR)/wsv/%.o: %.c Makefile.common Makefile $(SDK_HEADERS) $(BUILD_DIR)/config.h | $(BUILD_DIR)
+	$(V)$(ECHO) [ CC wsv ] $(notdir $<)
+	$(V)$(CC) -c $(CFLAGS) $(WSV_C_INCLUDES) -Wa,-a,-ad,-alms=$(BUILD_DIR)/wsv/$(notdir $(<:.c=.lst)) $< -o $@
+
+$(BUILD_DIR)/md/%.o: %.c Makefile.common Makefile $(SDK_HEADERS) $(BUILD_DIR)/config.h | $(BUILD_DIR)
+	$(V)$(ECHO) [ CC md ] $(notdir $<)
+	$(V)$(CC) -c $(CFLAGS) $(MD_C_INCLUDES) -Wa,-a,-ad,-alms=$(BUILD_DIR)/md/$(notdir $(<:.c=.lst)) $< -o $@
+
+$(BUILD_DIR)/a7800/%.o: %.c Makefile.common Makefile $(SDK_HEADERS) $(BUILD_DIR)/config.h | $(BUILD_DIR)
+	$(V)$(ECHO) [ CC a7800 ] $(notdir $<)
+	$(V)$(CC) -c $(CFLAGS) $(A7800_C_INCLUDES) -Wa,-a,-ad,-alms=$(BUILD_DIR)/a7800/$(notdir $(<:.c=.lst)) $< -o $@
+
+$(BUILD_DIR)/tama/%.o: %.c Makefile.common Makefile $(SDK_HEADERS) $(BUILD_DIR)/config.h | $(BUILD_DIR)
+	$(V)$(ECHO) [ CC tama ] $(notdir $<)
+	$(V)$(CC) -c $(CFLAGS) $(TAMA_C_INCLUDES) -Wa,-a,-ad,-alms=$(BUILD_DIR)/tama/$(notdir $(<:.c=.lst)) $< -o $@
+
+$(BUILD_DIR):
+	$(V)mkdir $@
+	$(V)mkdir $@/core
+	$(V)mkdir $@/nes
+	$(V)mkdir $@/nes_fceu
+	$(V)mkdir $@/gnuboy
+	$(V)mkdir $@/smsplusgx
+	$(V)mkdir $@/pce
+	$(V)mkdir $@/msx
+	$(V)mkdir $@/gw
+	$(V)mkdir $@/wsv
+	$(V)mkdir $@/md
+	$(V)mkdir $@/a7800
+	$(V)mkdir $@/tama
+
+#######################################
+# Flashing
+#######################################
+
+OPENOCD ?= openocd
+ADAPTER ?= stlink
+FLASH_MULTI ?= scripts/flash_multi.sh
+FLASHTEST ?= scripts/flashapp.sh --test
+
+# Starts openocd and attaches to the target. To be used with 'flash_intflash_nc' and 'gdb'
+openocd:
+	$(OPENOCD) -f scripts/interface_$(ADAPTER).cfg -c "init; halt"
+.PHONY: openocd
+
+reset_gnwmanager:
+	@$(GNWMANAGER) start bank1
+.PHONY: reset_gnwmanager
+
+reset:
+	$(OPENOCD) -f scripts/interface_$(ADAPTER).cfg -c "init; reset; exit"
+.PHONY: reset
+
+erase_intflash_1_gnwmanager:
+	@$(GNWMANAGER) erase bank1
+.PHONY: erase_intflash_1_gnwmanager
+
+erase_intflash_1:
+	$(OPENOCD) -f scripts/interface_$(ADAPTER).cfg -c "init; halt; flash erase_address 0x08000000 131072; resume; exit"
+.PHONY: erase_intflash_1
+
+erase_intflash_2_gnwmanager:
+	@$(GNWMANAGER) erase bank2
+.PHONY: erase_intflash_2_gnwmanager
+
+erase_intflash_2:
+	$(OPENOCD) -f scripts/interface_$(ADAPTER).cfg -c "init; halt; flash erase_address 0x08100000 131072; resume; exit"
+.PHONY: erase_intflash_2
+
+erase_extflash_gnwmanager:
+	@echo "Erasing External Flash..."
+	@$(GNWMANAGER) erase ext
+	@echo "Erasing Complete!"
+.PHONY: erase_extflash_gnwmanager
+
+erase_extflash: flash_intflash
+	$(V)./scripts/extflash_erase.sh $(EXTFLASH_SIZE)
+.PHONY: erase_extflash
+
+start_bank_1_gnwmanager:
+	$(GNWMANAGER) start bank1
+.PHONY: start_bank_1_gnwmanager
+
+start_bank_1:
+	$(OPENOCD) -f scripts/interface_$(ADAPTER).cfg \
+		-c 'init; reset halt' \
+		-c 'set MSP 0x[string range [mdw 0x08000000] 12 19]' \
+		-c 'set PC 0x[string range [mdw 0x08000004] 12 19]' \
+		-c 'echo "Setting MSP -> $$MSP"' \
+		-c 'echo "Setting PC -> $$PC"' \
+		-c 'reg msp $$MSP' \
+		-c 'reg pc $$PC' \
+		-c 'resume;exit'
+.PHONY: start_bank_1
+
+start_bank_2_gnwmanager:
+	$(GNWMANAGER) start bank2
+.PHONY: start_bank_2_gnwmanager
+
+start_bank_2:
+	$(OPENOCD) -f scripts/interface_$(ADAPTER).cfg \
+		-c 'init; reset halt' \
+		-c 'set MSP 0x[string range [mdw 0x08100000] 12 19]' \
+		-c 'set PC 0x[string range [mdw 0x08100004] 12 19]' \
+		-c 'echo "Setting MSP -> $$MSP"' \
+		-c 'echo "Setting PC -> $$PC"' \
+		-c 'reg msp $$MSP' \
+		-c 'reg pc $$PC' \
+		-c 'resume;exit'
+.PHONY: start_bank_2
+
+start_gnwmanager:  # Start code located at INTFLASH_ADDRESS
+	$(GNWMANAGER) start $(INTFLASH_ADDRESS)
+.PHONY: start_gnwmanager
+
+start:  # Start code located at INTFLASH_ADDRESS
+	$(OPENOCD) -f scripts/interface_$(ADAPTER).cfg \
+		-c 'init; reset halt' \
+		-c 'set MSP 0x[string range [mdw $(INTFLASH_ADDRESS)] 12 19]' \
+		-c 'set PC 0x[string range [mdw [format 0x%x [expr {$(INTFLASH_ADDRESS) + 0x4}]]] 12 19]' \
+		-c 'echo "Setting MSP -> $$MSP"' \
+		-c 'echo "Setting PC -> $$PC"' \
+		-c 'reg msp $$MSP' \
+		-c 'reg pc $$PC' \
+		-c 'resume;exit'
+.PHONY: start
+
+
+flash_intflash_gnwmanager: $(BUILD_DIR)/$(TARGET)_intflash.bin
+	$(GNWMANAGER) flash $(INTFLASH_ADDRESS) $< -- start $(INTFLASH_ADDRESS)
+.PHONY: flash_intflash_gnwmanager
+
+# Programs the internal flash using a new OpenOCD instance
+flash_intflash: $(BUILD_DIR)/$(TARGET)_intflash.bin
+	$(OPENOCD) -f scripts/interface_$(ADAPTER).cfg -c "program $< $(INTFLASH_ADDRESS) verify reset exit"
+.PHONY: flash_intflash
+
+# Flashes using an existing openocd instance
+flash_intflash_nc: $(BUILD_DIR)/$(TARGET)_intflash.bin
+	echo "program $< $(INTFLASH_ADDRESS) verify reset" | nc -c localhost 4444
+.PHONY: flash_intflash_nc
+
+flash_extflash_gnwmanager: $(BUILD_DIR)/$(TARGET)_extflash.bin
+	@$(GNWMANAGER) flash ext $< --offset=$(EXTFLASH_OFFSET) -- start $(INTFLASH_ADDRESS)
+.PHONY: flash_extflash_gnwmanager
+
+flash_extflash: $(BUILD_DIR)/$(TARGET)_extflash.bin
+	$(FLASH_MULTI) $(BUILD_DIR)/$(TARGET)_extflash.bin $(EXTFLASH_OFFSET)
+.PHONY: flash_extflash
+
+flash_test: flash_intflash
+	$(FLASHTEST)
+.PHONY: flash_test
+
+# Programs both the external and internal flash.
+flash_gnwmanager: CheckTools CheckDirtySubmodules $(BUILD_DIR)/$(TARGET)_intflash.bin $(BUILD_DIR)/$(TARGET)_extflash.bin
+	@$(GNWMANAGER) flash $(INTFLASH_ADDRESS) $(BUILD_DIR)/$(TARGET)_intflash.bin \
+		-- flash ext $(BUILD_DIR)/$(TARGET)_extflash.bin --offset=$(EXTFLASH_OFFSET) \
+		-- start $(INTFLASH_ADDRESS) \
+		$(RESET_DBGMCU_CMD)
+.PHONY: flash_gnwmanager
+
+flash: CheckTools CheckDirtySubmodules
+	$(V)$(MAKE) flash_intflash
+	$(V)$(MAKE) flash_extflash
+	$(V)$(RESET_DBGMCU_CMD)
+.PHONY: flash
+
+monitor_gnwmanager:
+	@$(GNWMANAGER) monitor
+.PHONY: monitor_gnwmanager
+
+monitor:
+	$(V)$(PYTHON3) tools/logpoll.py
+.PHONY: monitor
+
+flash-monitor: flash
+	$(V)$(MAKE) monitor
+.PHONY: flash-monitor
+
+# Alias for flash
+flash_all: flash
+
+# Transfers save files from the device to the host machine
+flash_saves_backup: $(BUILD_DIR)/$(TARGET).elf
+	$(V)./scripts/saves_backup.sh $<
+.PHONY: flash_saves_backup
+
+# Transfers save files from the host machine to the device
+flash_saves_restore: $(BUILD_DIR)/$(TARGET).elf
+	$(V)./scripts/saves_restore.sh $<
+.PHONY: flash_saves_restore
+
+# Erases the saveflash area on the device
+flash_saves_erase: $(BUILD_DIR)/$(TARGET).elf
+	$(V)./scripts/saves_erase.sh $<
+.PHONY: flash_saves_erase
+
+size: $(BUILD_DIR)/$(TARGET).elf
+	$(V)./scripts/size.sh $<
+.PHONY: size
+
+reset_dbgmcu:
+	# Reset the DBGMCU configuration register (DBGMCU_CR)
+	$(V)$(OPENOCD) -f scripts/interface_$(ADAPTER).cfg -c "init; reset halt; mww 0x5C001004 0x00000000; resume; exit;"
+.PHONY: reset_dbgmcu
+
+reset_mcu:
+	$(V)$(OPENOCD) -f scripts/interface_$(ADAPTER).cfg -c "init; reset run; exit;" 2> $(BUILD_DIR)/openocd.log
+.PHONY: reset_mcu
+
+gdb: $(BUILD_DIR)/$(TARGET).elf
+	$(GDB) $< -ex "target extended-remote :3333"
+.PHONY: gdb
+
+# Flashes intflash *only* and launches gdb afterwards
+gdb_intflash: $(BUILD_DIR)/$(TARGET)_intflash.bin
+	$(GNWMANAGER) flash $(INTFLASH_ADDRESS) $< -- start $(INTFLASH_ADDRESS) --halt -- gdb
+.PHONY: gdb_intflash
+
+gdb_intflash: flash_intflash_nc gdb
+.PHONY: gdb_intflash
+
+dump_logs: $(BUILD_DIR)/$(TARGET).elf
+	$(V)./scripts/dump_logs.sh
+.PHONY: dump_logs
+
+dump_screenshot:
+	$(V)./tools/screenshot.py
+.PHONY: dump_screenshot
+
+docker_build:
+	$(V)docker build -f Dockerfile --tag sylverb/retro-go-builder .
+.PHONY: docker_build
+
+docker:
+	$(V)docker run --rm -it --privileged --user $(shell id -u):$(shell id -g) -v $(PWD):/opt/workdir -v /dev/bus/usb:/dev/bus/usb sylverb/retro-go-builder
+.PHONY: docker
+
+help:
+	@echo "Game and Watch Retro Go"
+	@echo ""
+	@echo "Configuration variables:"
+	@echo "  EXTFLASH_FORCE_SPI  - Forces the use of legacy SPI mode for the external flash driver"
+	@echo "  EXTFLASH_SIZE_MB    - Sets the external flash size in megabytes"
+	@echo "  EXTFLASH_SIZE       - Sets the external flash size in bytes (has precedence over EXTFLASH_SIZE_MB)"
+	@echo "  LARGE_FLASH         - Sets the external flash size to 16MB  (deprecated)"
+	@echo "  EXTFLASH_OFFSET     - Places the data at an offset in the external flash (useful for dual boot)"
+	@echo "  INTFLASH_BANK       - Sets the internal flash bank. Valid values {1,2} (default=1)."
+	@echo "  INTFLASH_ADDRESS    - Explicit internal flash address. If not provided, derived from INTFLASH_BANK."
+	@echo "  BIG_BANK            - Use internal flash bank as undocumented 256k.(default=1, set 0 to 128k)."
+	@echo "                        It's required patched OPENOCD to work"
+	@echo "  COMPRESS            - Configures ROM compression, Valid values {0,lzma} (default=lzma)."
+	@echo "  STATE_SAVING        - Set to 0 to disable state saving (default=1)"
+	@echo "  RESET_DBGMCU        - Configures if DBGMCU should be reset after flashing."
+	@echo "                        Set to 0 to disable power saving (default=1)"
+	@echo "  CODEPAGE            - Sets codepage to configures default display language.(default=1252)"
+	@echo "                        set 932 as Japanese; 936 as simple Chinese; 950 as traditional Chinese;"
+	@echo "                        949 as Korean; 12511 as Russian; 12521 as Spanish; 12522 as Portuguese;"
+	@echo "                        12523 as French; 12524 as Italian; 12525 as German;"
+	@echo "  UICODEPAGE          - Sets ui display language.(default=CODEPAGE=1252 as English)"
+	@echo "  ROMINFOCODE         - Sets encoding of parse rom name, default = ascii"
+	@echo "  ES_ES,PT_PT,FR_FR,  "
+	@echo "  IT_IT,ZH_CN,ZH_TW,  "
+	@echo "  KO_KR,JA_JP,DE_DE,  "
+	@echo "  RU_RU               - Set to 1 to include or exclude some other language"
+	@echo "  COVERFLOW           - Set to 1 include cover art with rom (default=0)"
+	@echo "  JPG_QUALITY         - Set convert cover art image jpg quality (default = 90)"
+	@echo "  ENABLE_SCREENSHOT   - Set to 1 to enable screenshot support (default disabled if extflash is 1MB)"
+	@echo "  GNW_TARGET          - Game & Watch target, Valid values {mario,zelda} (default=mario)"
+	@echo "  GAME_GENIE          - Set to 1 to enable game genie support (deprecated, use CHEAT_CODES instead)"
+	@echo "  CHEAT_CODES         - Set to 1 to enable cheat codes support (default=0)"
+	@echo "  MSX_USE_BANK_2      - Set to 1 to use Internal Bank 2 for MSX performance improvements."
+	@echo "                        Retro-Go must be in Bank 1."
+	@echo "  SHARED_HIBERNATE_SAVESTATE - Set to 1 to enable a separate savestate for off/on (default=0)"
+	@echo "  DISABLE_SPLASH_SCREEN - Set to 1 to disable the slash screen animation at startup (default=0)"
+	@echo "  FORCE_NOFRENDO      - Set to 1 to force use of previous nofrendo-go emulator instead of fceumm (default=0)"
+	@echo ""
+	@echo "Current configuration:"
+	@echo "  EXTFLASH_FORCE_SPI=$(EXTFLASH_FORCE_SPI)"
+	@echo "  EXTFLASH_SIZE_MB=$(EXTFLASH_SIZE_MB)"
+	@echo "  EXTFLASH_SIZE=$(EXTFLASH_SIZE)"
+	@echo "  LARGE_FLASH=$(LARGE_FLASH)"
+	@echo "  EXTFLASH_OFFSET=$(EXTFLASH_OFFSET)"
+	@echo "  INTFLASH_BANK=$(INTFLASH_BANK)"
+	@echo "  BIG_BANK=$(BIG_BANK)"
+	@echo "  COMPRESS=$(COMPRESS)"
+	@echo "  STATE_SAVING=$(STATE_SAVING)"
+	@echo "  RESET_DBGMCU=$(RESET_DBGMCU)"
+	@echo "  ENABLE_SCREENSHOT=$(ENABLE_SCREENSHOT)"
+	@echo "  GNW_TARGET=$(GNW_TARGET)"
+	@echo "  CHEAT_CODES=$(CHEAT_CODES)"
+	@echo "  MSX_USE_BANK_2=$(MSX_USE_BANK_2)"
+	@echo "  GCC_PATH=$(GCC_PATH)"
+	@echo "  PREFIX=$(PREFIX)"
+	@echo "  CODEPAGE=$(CODEPAGE)"
+	@echo "  UICODEPAGE=$(UICODEPAGE)"
+	@echo "  COVERFLOW=$(COVERFLOW)"
+	@echo "  ROMINFOCODE=$(ROMINFOCODE)"
+	@echo "  SHARED_HIBERNATE_SAVESTATE=$(SHARED_HIBERNATE_SAVESTATE)"
+	@echo "  ES_ES=$(ES_ES)"
+	@echo "  PT_PT=$(PT_PT)"
+	@echo "  FR_FR=$(FR_FR)"
+	@echo "  IT_IT=$(IT_IT)"
+	@echo "  RU_RU=$(RU_RU)"
+	@echo "  DE_DE=$(DE_DE)"
+	@echo "  ZH_CN=$(ZH_CN)"
+	@echo "  ZH_TW=$(ZH_TW)"
+	@echo "  KO_KR=$(KO_KR)"
+	@echo "  JA_JP=$(JA_JP)"
+	@echo ""
+	@echo "Targets:"
+	@echo "  docker            - Runs a docker container using the image created by docker_build"
+	@echo "  docker_build      - Builds a docker image"
+	@echo "  dump_logs         - Dumps the callstack and logbuf. Starts openocd and gdb under the hood."
+	@echo "  dump_screenshot   - Downloads the stored screenshot."
+	@echo "  flash             - Programs the internal and external flash"
+	@echo "  flash_all         - Alias for 'flash' (deprecated)"
+	@echo "  flash_extflash    - Only programs the external flash"
+	@echo "  flash_intflash    - Only programs the internal flash"
+	@echo "  flash_intflash_nc - Only programs the internal flash and uses an existing openocd server"
+	@echo "  flash_test        - Runs a flash test. Will overwrite data on the external flash!"
+	@echo "  gdb               - Starts gdb and attaches to openocd"
+	@echo "  gdb_intflash      - Runs flash_intflash_nc, then starts gdb and attaches to openocd"
+	@echo "  openocd           - Starts openocd with appropriate config"
+	@echo "  reset_dbgmcu      - Resets the unit and turns off DBGMCU (lowers battery drain)"
+	@echo "  reset_mcu         - Resets the unit"
+	@echo "  romdef            - Dumps all rom info to roms.json in roms directory to custom display name and"
+	@echo "                      publish property under edit that file before make flash "
+	@echo "  size              - Prints size information for all sections"
+	@echo ""
+.PHONY: help
+
+#######################################
+# Define rom's display name and publish property
+#######################################
+romdef:
+	$(V)$(ECHO) [ PYTHON3 ] $(notdir $<)
+	$(V)$(PYTHON3) parse_romdef.py
+	$(V)$(ECHO) [ RM ] $(BUILD_DIR)/roms.a
+	$(V)rm -rf $(BUILD_DIR)/roms.a
+	$(V)$(ECHO) [ RM ] $(BUILD_DIR)/core/rom_manager.*
+	$(V)rm -rf $(BUILD_DIR)/core/rom_manager.*
+.PHONY: romdef
+
+#######################################
+# download SDK files
+#######################################
+$(SDK_DIR)/%:
+	$(V)$(ECHO) [ WGET ] $(notdir $@)
+	$(V)wget -q $(SDK_URL)/$(SDK_VERSION)/$@ -P $(dir $@)
+
+.PHONY: download_sdk
+download_sdk: $(SDK_HEADERS) $(SDK_C_SOURCES) $(SDK_ASM_SOURCES)
+
+#######################################
+# clean up
+#######################################
+clean:
+	$(V)$(ECHO) [ RM ] $(BUILD_DIR)
+	$(V)-rm -fR $(BUILD_DIR)
+
+distclean: clean
+	$(V)$(ECHO) [ RM ] $(SDK_DIR)
+	$(V)rm -rf $(SDK_DIR)
+
+#######################################
+# dependencies
+#######################################
+-include $(wildcard $(BUILD_DIR)/*.d)
+
+# *** EOF ***

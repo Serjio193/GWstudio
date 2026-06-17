@@ -1,0 +1,6 @@
+Put release-only portable archives here:
+
+- tools.zip
+- sources.zip
+
+Only these exact file names are embedded by build.rs.

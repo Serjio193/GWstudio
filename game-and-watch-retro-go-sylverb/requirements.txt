@@ -1,0 +1,6 @@
+lz4
+pillow
+tqdm
+xxhash
+pyelftools
+gnwmanager

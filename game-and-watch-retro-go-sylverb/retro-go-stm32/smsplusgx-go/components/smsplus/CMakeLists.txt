@@ -1,0 +1,5 @@
+set(COMPONENT_SRCDIRS ". cpu sound")
+set(COMPONENT_ADD_INCLUDEDIRS ". cpu sound")
+set(COMPONENT_REQUIRES "odroid")
+register_component()
+rg_setup_compile_options()
