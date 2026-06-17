@@ -3168,6 +3168,41 @@ fn run_gnwmanager_info_with_retries(backend: &str, frequency: u32, attempts: usi
     ))
 }
 
+fn read_info_frequency_attempts(requested_frequency: u32) -> Vec<u32> {
+    let mut attempts = Vec::new();
+    for value in [
+        requested_frequency,
+        8_000_000,
+        4_000_000,
+        2_000_000,
+        1_000_000,
+        500_000,
+        240_000,
+        100_000,
+    ] {
+        if value > 0 && !attempts.contains(&value) {
+            attempts.push(value);
+        }
+    }
+    attempts
+}
+
+fn run_gnwmanager_info_with_frequency_fallback(
+    backend: &str,
+    frequency: u32,
+) -> Result<(Output, u32), String> {
+    let mut last_error = String::new();
+    for candidate_frequency in read_info_frequency_attempts(frequency) {
+        match run_gnwmanager_info_with_retries(backend, candidate_frequency, 2) {
+            Ok(output) => return Ok((output, candidate_frequency)),
+            Err(error) => {
+                last_error = format!("freq {candidate_frequency}: {error}");
+            }
+        }
+    }
+    Err(format!("gnwmanager info failed after frequency fallback: {last_error}"))
+}
+
 fn read_device_uid_under_reset(frequency: u32) -> Result<String, String> {
     let script = format!(
         r#"
@@ -5489,7 +5524,7 @@ async fn read_device_info(_app: tauri::AppHandle, backend: String, frequency: u3
     tauri::async_runtime::spawn_blocking(move || {
         let _requested_backend = backend;
         let used_backend = "pyocd".to_string();
-        let output = run_gnwmanager_info_with_retries(&used_backend, frequency, 5)?;
+        let (output, used_frequency) = run_gnwmanager_info_with_frequency_fallback(&used_backend, frequency)?;
         let text = output_text(&output);
 
         let details = parse_details(&text);
@@ -5549,7 +5584,7 @@ async fn read_device_info(_app: tauri::AppHandle, backend: String, frequency: u3
         })
         .unwrap_or_else(|| "UNKNOWN".to_string());
         let target_voltage = if target_voltage_from_info.trim().eq_ignore_ascii_case("UNKNOWN") {
-            read_target_voltage_pyocd(frequency).unwrap_or(target_voltage_from_info)
+            read_target_voltage_pyocd(used_frequency).unwrap_or(target_voltage_from_info)
         } else {
             target_voltage_from_info
         };
@@ -5566,7 +5601,11 @@ async fn read_device_info(_app: tauri::AppHandle, backend: String, frequency: u3
         })
         .unwrap_or_else(|| "UNKNOWN".to_string());
         let device_uid = device_uid_from_details(&details, &text)
-            .or_else(|| read_device_uid_under_reset(frequency).ok())
+            .or_else(|| {
+                read_info_frequency_attempts(used_frequency)
+                    .into_iter()
+                    .find_map(|candidate_frequency| read_device_uid_under_reset(candidate_frequency).ok())
+            })
             .unwrap_or_else(|| "UNKNOWN".to_string());
         if device_uid != "UNKNOWN" {
             set_current_device_uid(Some(device_uid.clone()));
@@ -5577,7 +5616,7 @@ async fn read_device_info(_app: tauri::AppHandle, backend: String, frequency: u3
             set_current_device_uid(None);
         }
         let summary = if output.status.success() {
-            format!("Device info read successfully ({}, freq {})", used_backend, frequency)
+            format!("Device info read successfully ({}, freq {})", used_backend, used_frequency)
         } else if !text.trim().is_empty() {
             format!("gnwmanager returned a non-zero status: {}", text.lines().last().unwrap_or("unknown error"))
         } else {

@@ -3,7 +3,7 @@ import clsx from "clsx";
 import { getCurrentWindow, listen, safeInvoke } from "./lib/tauri";
 import { MODES, TRANSLATIONS, EMULATORS, EMULATOR_FILE_ACCEPT } from "./lib/mock";
 
-const APP_VERSION = "1.0.0";
+const APP_VERSION = "1.0.1";
 const GITHUB_REPOSITORY_URL = "https://github.com/Serjio193/GWstudio";
 const GITHUB_LATEST_RELEASE_API = "https://api.github.com/repos/Serjio193/GWstudio/releases/latest";
 const PAYPAL_THANKS_URL = "https://www.paypal.com/paypalme/SerhiiTarnopovych";
@@ -5746,9 +5746,9 @@ export default function App() {
         </div>
 
         {settingsOpen && (
-          <div className="fixed right-6 top-[104px] z-50 w-[420px]">
-            <Panel className="border-zinc-700/90 bg-[rgba(10,10,12,0.96)] p-6 shadow-[0_0_40px_rgba(0,0,0,0.55)]">
-              <div className="mb-6 flex items-center justify-between">
+          <div className="fixed bottom-4 right-3 top-4 z-50 w-[min(420px,calc(100vw-24px))] sm:right-6 sm:top-6">
+            <Panel className="flex h-full max-h-[calc(100vh-2rem)] flex-col overflow-hidden border-zinc-700/90 bg-[rgba(10,10,12,0.96)] p-5 shadow-[0_0_40px_rgba(0,0,0,0.55)] sm:p-6">
+              <div className="mb-4 flex shrink-0 items-center justify-between sm:mb-6">
                 <div>
                   <div className={cx("text-sm font-black uppercase tracking-wide", mode.accentText)}>
                     {t.settings}
@@ -5760,7 +5760,7 @@ export default function App() {
                 </button>
               </div>
 
-                <div className="space-y-5">
+                <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1 sm:space-y-5 sm:pr-2">
                   <div>
                     <div className="mb-3 text-xs font-bold uppercase tracking-wide text-zinc-500">{t.language}</div>
                   <div className="grid grid-cols-3 gap-3">
@@ -5800,7 +5800,7 @@ export default function App() {
                     <input
                       type="range"
                       min={10}
-                      max={4000}
+                      max={8000}
                       step={10}
                       value={probeFrequencyKhz}
                       onChange={(event) => setProbeFrequencyKhz(Number(event.target.value))}
@@ -5809,7 +5809,7 @@ export default function App() {
 
                     <div className="mt-2 flex justify-between text-[11px] text-zinc-500">
                       <span>10 kHz</span>
-                      <span>4000 kHz</span>
+                      <span>8000 kHz</span>
                     </div>
                   </div>
 
