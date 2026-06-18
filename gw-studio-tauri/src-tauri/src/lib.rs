@@ -3071,19 +3071,6 @@ fn device_uid_from_details(details: &BTreeMap<String, String>, raw_text: &str) -
 }
 
 fn gnwmanager_argv() -> Vec<String> {
-    let script_exe = runtime_tools_dir()
-        .join("python")
-        .join("Scripts")
-        .join("gnwmanager.exe");
-    if script_exe.exists() {
-        return vec![script_exe.to_string_lossy().to_string()];
-    }
-    let bundled = runtime_tools_dir()
-        .join("gnwmanager")
-        .join("gnwmanager.exe");
-    if bundled.exists() {
-        return vec![bundled.to_string_lossy().to_string()];
-    }
     let python = locate_python_exe();
     if python.exists() {
         return vec![
@@ -3201,6 +3188,97 @@ fn run_gnwmanager_info_with_frequency_fallback(
         }
     }
     Err(format!("gnwmanager info failed after frequency fallback: {last_error}"))
+}
+
+fn run_direct_info_under_reset(frequency: u32) -> Result<String, String> {
+    let script = r#"
+from gnwmanager.gnw import GnW
+from gnwmanager.ocdbackend.pyocd_backend import PyOCDBackend
+
+try:
+    from gnwmanager.cli.devices import DeviceModel
+except Exception:
+    DeviceModel = None
+
+backend = PyOCDBackend(connect_mode="under-reset")
+gnw = GnW(backend)
+try:
+    backend.open()
+    backend.set_frequency(__FREQUENCY__)
+    print("OCD Backend Version:         pyocd-direct")
+    print("Debug Probe:                 " + str(getattr(backend, "probe_name", "UNKNOWN")))
+    try:
+        probe = getattr(backend, "probe", None)
+        link = getattr(probe, "_link", None) if probe is not None else None
+        voltage = getattr(link, "target_voltage", None) if link is not None else None
+        print("Target voltage:             " + (f"{float(voltage):.2f} V" if voltage is not None else "UNKNOWN"))
+    except Exception:
+        print("Target voltage:             UNKNOWN")
+    try:
+        data = backend.read_memory(0x08FFF800, 12)
+        uid = "".join(f"{int.from_bytes(data[index:index + 4], 'little'):08X}" for index in range(0, 12, 4))
+        print("Device UID:                 " + uid)
+    except Exception:
+        print("Device UID:                 UNKNOWN")
+    try:
+        cpuid = int.from_bytes(backend.read_memory(0xE000ED00, 4), "little")
+        print("CPU ID:                     CPUID 0x%08X" % cpuid)
+    except Exception:
+        print("CPU ID:                     UNKNOWN")
+    try:
+        gnw.start_gnwmanager()
+        if DeviceModel is not None:
+            try:
+                print("Detected Stock Firmware:    " + str(DeviceModel.autodetect(gnw)).upper())
+            except Exception:
+                print("Detected Stock Firmware:    UNKNOWN")
+        else:
+            print("Detected Stock Firmware:    UNKNOWN")
+        try:
+            print("External Flash Size (MB):   " + str(gnw.external_flash_size / (1 << 20)))
+        except Exception:
+            print("External Flash Size (MB):   UNKNOWN")
+        try:
+            print("Locked?:                    " + ("LOCKED" if gnw.is_locked() else "UNLOCKED"))
+        except Exception:
+            print("Locked?:                    UNKNOWN")
+        print("Filesystem Size (B):        UNKNOWN")
+    except Exception as exc:
+        print("Detected Stock Firmware:    UNKNOWN")
+        print("External Flash Size (MB):   UNKNOWN")
+        print("Locked?:                    UNKNOWN")
+        print("Filesystem Size (B):        UNKNOWN")
+        print("Direct info warning:        " + type(exc).__name__ + ": " + str(exc))
+finally:
+    try:
+        backend.close()
+    except Exception:
+        pass
+"#
+    .replace("__FREQUENCY__", &frequency.to_string());
+
+    let python = locate_python_exe();
+    let mut command = Command::new(&python);
+    command.arg("-u").arg("-c").arg(script);
+    let output = hide_command_window(&mut command)
+        .output()
+        .map_err(|error| format!("failed to run direct under-reset info: {error}"))?;
+    let text = output_text(&output);
+    if !output.status.success() {
+        return Err(format!("direct under-reset info failed: {text}"));
+    }
+    Ok(text)
+}
+
+fn run_direct_info_with_frequency_fallback(frequency: u32) -> Result<(String, u32), String> {
+    let mut last_error = String::new();
+    for candidate_frequency in read_info_frequency_attempts(frequency) {
+        match run_direct_info_under_reset(candidate_frequency) {
+            Ok(text) => return Ok((text, candidate_frequency)),
+            Err(error) => last_error = format!("freq {candidate_frequency}: {error}"),
+        }
+    }
+    Err(format!("direct under-reset info failed after frequency fallback: {last_error}"))
 }
 
 fn read_device_uid_under_reset(frequency: u32) -> Result<String, String> {
@@ -5524,8 +5602,14 @@ async fn read_device_info(_app: tauri::AppHandle, backend: String, frequency: u3
     tauri::async_runtime::spawn_blocking(move || {
         let _requested_backend = backend;
         let used_backend = "pyocd".to_string();
-        let (output, used_frequency) = run_gnwmanager_info_with_frequency_fallback(&used_backend, frequency)?;
-        let text = output_text(&output);
+        let (text, used_frequency, info_source) = match run_gnwmanager_info_with_frequency_fallback(&used_backend, frequency) {
+            Ok((output, used_frequency)) => (output_text(&output), used_frequency, "gnwmanager"),
+            Err(gnwmanager_error) => {
+                let (text, used_frequency) = run_direct_info_with_frequency_fallback(frequency)
+                    .map_err(|direct_error| format!("{gnwmanager_error}; {direct_error}"))?;
+                (text, used_frequency, "direct under-reset")
+            }
+        };
 
         let details = parse_details(&text);
         let programmer = detail(&details, &["Programmer", "Debug Probe"])
@@ -5615,13 +5699,7 @@ async fn read_device_info(_app: tauri::AppHandle, backend: String, frequency: u3
         } else {
             set_current_device_uid(None);
         }
-        let summary = if output.status.success() {
-            format!("Device info read successfully ({}, freq {})", used_backend, used_frequency)
-        } else if !text.trim().is_empty() {
-            format!("gnwmanager returned a non-zero status: {}", text.lines().last().unwrap_or("unknown error"))
-        } else {
-            "gnwmanager returned a non-zero status".to_string()
-        };
+        let summary = format!("Device info read successfully ({info_source}, {used_backend}, freq {used_frequency})");
         let detected_firmware = detail(
             &details,
             &["Stock firmware", "Detected firmware", "Detected Stock Firmware"],
