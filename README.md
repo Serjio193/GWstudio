@@ -36,6 +36,40 @@ You must provide your own legally obtained:
 
 The portable release is a single executable. On startup it extracts its bundled tools to a temporary runtime folder next to the exe and removes that runtime after closing.
 
+## Download And Verify
+
+Download the latest `GW.Studio.exe` from GitHub Releases:
+
+```text
+https://github.com/Serjio193/GWstudio/releases/latest
+```
+
+Each release also provides `GW.Studio.exe.sha256`.
+
+PowerShell verification:
+
+```powershell
+Get-FileHash -Algorithm SHA256 .\GW.Studio.exe
+```
+
+The printed hash must match the first value inside `GW.Studio.exe.sha256`.
+
+Example `.sha256` format:
+
+```text
+87664067AB929B6C55B53886B9D0D71887A27BFD09C1A2A85FF8DF8A64FA2B9D  GW.Studio.exe
+```
+
+## Windows SmartScreen
+
+GW Studio is currently not code-signed. Windows may show a warning such as "unknown publisher" or "Windows protected your PC".
+
+This warning appears because the executable is unsigned and new, not because the SHA256 check failed. To reduce risk:
+
+- Download only from the official GitHub Releases page.
+- Verify `GW.Studio.exe` with the matching `.sha256` file.
+- Keep the exe in a Latin-only folder path, for example `C:\GWStudio\GW.Studio.exe`.
+
 ## Basic Workflow
 
 1. Connect ST-LINK to the console.
@@ -85,4 +119,3 @@ Retro-Go fork source:
 Game & Watch patch source:
 
 - https://github.com/BrianPugh/game-and-watch-patch
-
