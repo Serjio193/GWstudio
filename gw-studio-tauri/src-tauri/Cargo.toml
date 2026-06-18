@@ -1,6 +1,6 @@
 [package]
 name = "gw_studio_tauri"
-version = "1.0.11"
+version = "1.0.12"
 description = "GW Studio desktop shell"
 authors = ["OpenAI Codex"]
 edition = "2021"
