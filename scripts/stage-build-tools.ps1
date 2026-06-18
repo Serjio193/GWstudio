@@ -165,6 +165,7 @@ $keepGitExe = @(
   "ln.exe",
   "ls.exe",
   "mkdir.exe",
+  "mktemp.exe",
   "mv.exe",
   "patch.exe",
   "printf.exe",
