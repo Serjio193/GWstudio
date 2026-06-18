@@ -45,9 +45,9 @@ body {
 }
 
 .gw-console-image {
-  width: clamp(380px, 54vw, 720px);
+  width: clamp(260px, 42vw, 620px);
   max-width: calc(100% - 2rem);
-  max-height: calc(100% - 2rem);
+  max-height: calc(100% - 3rem);
 }
 
 .gw-console-shadow {
