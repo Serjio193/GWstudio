@@ -3,7 +3,7 @@ import clsx from "clsx";
 import { getCurrentWindow, listen, safeInvoke } from "./lib/tauri";
 import { MODES, TRANSLATIONS, EMULATORS, EMULATOR_FILE_ACCEPT } from "./lib/mock";
 
-const APP_VERSION = "1.0.2";
+const APP_VERSION = "1.0.3";
 const GITHUB_REPOSITORY_URL = "https://github.com/Serjio193/GWstudio";
 const GITHUB_LATEST_RELEASE_API = "https://api.github.com/repos/Serjio193/GWstudio/releases/latest";
 const PAYPAL_THANKS_URL = "https://www.paypal.com/paypalme/SerhiiTarnopovych";
@@ -5479,7 +5479,7 @@ export default function App() {
 
         <div className="overflow-y-auto overflow-x-hidden px-5 pb-6" style={{ background: `radial-gradient(circle at top, ${mode.glow}, transparent 44%)` }}>
           <div className="grid auto-rows-max gap-4 py-4">
-            <div className="grid grid-cols-[minmax(320px,400px)_minmax(720px,1fr)] items-stretch gap-4">
+            <div className="grid grid-cols-[minmax(280px,360px)_minmax(520px,1fr)] items-stretch gap-4">
               <DeviceStatus
                 mode={mode}
                 t={t}
@@ -5568,7 +5568,7 @@ export default function App() {
             <div
               className={clsx(
                 "gw-work-grid grid items-stretch gap-4",
-                builderSettingsOpen ? "grid-cols-[320px_minmax(0,1fr)_420px]" : "grid-cols-[minmax(0,1fr)_420px]",
+                builderSettingsOpen ? "grid-cols-[280px_minmax(0,1fr)_360px]" : "grid-cols-[minmax(0,1fr)_360px]",
               )}
             >
               {builderSettingsOpen && (

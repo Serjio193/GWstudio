@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "GW Studio",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "identifier": "com.gamwatch.gwstudio",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -12,10 +12,10 @@
     "windows": [
       {
         "title": "GW Studio",
-        "width": 1600,
-        "height": 1100,
-        "minWidth": 1400,
-        "minHeight": 900,
+        "width": 1180,
+        "height": 720,
+        "minWidth": 960,
+        "minHeight": 620,
         "theme": "Dark",
         "resizable": true,
         "fullscreen": false
