@@ -261,7 +261,8 @@ $gccCxxInclude = Join-Path $gccRoot "arm-none-eabi\include\c++"
 if (Test-Path -LiteralPath $gccCxxInclude) {
   Remove-Item -LiteralPath $gccCxxInclude -Recurse -Force
 }
-Get-ChildItem -LiteralPath (Join-Path $gccRoot "arm-none-eabi\lib") -Recurse -File -Include "libstdc++*.a", "libsupc++*.a" -ErrorAction SilentlyContinue |
+Get-ChildItem -LiteralPath (Join-Path $gccRoot "arm-none-eabi\lib") -Recurse -File -ErrorAction SilentlyContinue |
+  Where-Object { $_.Name -like "libstdc++*.a" -or $_.Name -like "libsupc++*.a" } |
   Remove-Item -Force
 
 $checks = @(

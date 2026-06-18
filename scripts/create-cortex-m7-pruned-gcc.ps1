@@ -12,8 +12,8 @@ function Copy-TreeIfExists {
   )
 
   if (Test-Path -LiteralPath $Source) {
-    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $Destination) | Out-Null
-    Copy-Item -LiteralPath $Source -Destination $Destination -Recurse -Force
+    New-Item -ItemType Directory -Force -Path $Destination | Out-Null
+    Copy-Item -Path (Join-Path $Source "*") -Destination $Destination -Recurse -Force
   }
 }
 
@@ -60,6 +60,19 @@ Copy-TreeIfExists (Join-Path $fullRoot "arm-none-eabi\lib\thumb\v7e-m+dp\hard") 
 foreach ($name in @("nano.specs", "nosys.specs")) {
   Copy-FileIfExists (Join-Path $fullRoot "arm-none-eabi\lib\$name") (Join-Path $OutputRoot "arm-none-eabi\lib\$name")
   Copy-FileIfExists (Join-Path $fullRoot "arm-none-eabi\lib\thumb\v7e-m+dp\hard\$name") (Join-Path $OutputRoot "arm-none-eabi\lib\thumb\v7e-m+dp\hard\$name")
+}
+
+foreach ($required in @(
+  "arm-none-eabi\lib\nano.specs",
+  "arm-none-eabi\lib\nosys.specs",
+  "arm-none-eabi\lib\thumb\v7e-m+dp\hard\nano.specs",
+  "arm-none-eabi\lib\thumb\v7e-m+dp\hard\libc_nano.a",
+  "arm-none-eabi\lib\thumb\v7e-m+dp\hard\libnosys.a"
+)) {
+  $requiredPath = Join-Path $OutputRoot $required
+  if (-not (Test-Path -LiteralPath $requiredPath)) {
+    throw "Pruned GCC missing required file: $requiredPath"
+  }
 }
 
 $gccVersionRoot = Join-Path $fullRoot "lib\gcc\arm-none-eabi\14.3.1"
