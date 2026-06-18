@@ -45,7 +45,8 @@ $env:PYTHONNOUSERSITE = "1"
   "pyserial" `
   "pyyaml" `
   "pillow" `
-  "numpy"
+  "numpy" `
+  "keystone-engine"
 
 # GW Studio does not use gnwmanager's bundled unlock/patch payloads.
 # Keep the Python modules and `firmware.bin`, which is required by `GnW.start_gnwmanager()`
@@ -73,4 +74,4 @@ Write-Host "  Files:       $($files.Count)"
 Write-Host "  Size MB:     $([math]::Round($size / 1MB, 2))"
 Write-Host ""
 Write-Host "Smoke test:"
-& (Join-Path $pythonDir "python.exe") -c "import sys; assert not any('AppData\\Roaming\\Python' in p for p in sys.path), sys.path; import gnwmanager, pyocd, serial, yaml, PIL, numpy; print('python runtime ok')"
+& (Join-Path $pythonDir "python.exe") -c "import sys; assert not any('AppData\\Roaming\\Python' in p for p in sys.path), sys.path; import gnwmanager, pyocd, serial, yaml, PIL, numpy, keystone; print('python runtime ok')"
