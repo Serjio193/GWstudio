@@ -44,6 +44,10 @@ body {
   will-change: transform;
 }
 
+.gw-console-image {
+  max-height: min(100%, 390px);
+}
+
 .gw-console-shadow {
   animation: gw-shadow 8s ease-in-out infinite;
   will-change: transform, opacity, filter;
@@ -87,6 +91,15 @@ body {
   .gw-hero-panel,
   .gw-device-status-panel {
     min-height: 320px !important;
+  }
+
+  .gw-hero-panel {
+    height: 320px !important;
+  }
+
+  .gw-console-image {
+    width: min(640px, 82vw) !important;
+    max-height: 285px !important;
   }
 
   .gw-device-status-panel {
@@ -150,6 +163,20 @@ body {
   .gw-work-grid {
     height: clamp(280px, calc(100vh - 560px), 390px);
   }
+
+  .gw-hero-panel,
+  .gw-device-status-panel {
+    min-height: 250px !important;
+  }
+
+  .gw-hero-panel {
+    height: 250px !important;
+  }
+
+  .gw-console-image {
+    width: min(520px, 76vw) !important;
+    max-height: 215px !important;
+  }
 }
 
 @media (max-width: 1100px), (max-height: 680px) {
@@ -159,6 +186,20 @@ body {
 
   .gw-work-grid {
     height: clamp(260px, calc(100vh - 520px), 360px);
+  }
+
+  .gw-hero-panel,
+  .gw-device-status-panel {
+    min-height: 220px !important;
+  }
+
+  .gw-hero-panel {
+    height: 220px !important;
+  }
+
+  .gw-console-image {
+    width: min(460px, 72vw) !important;
+    max-height: 190px !important;
   }
 }
 

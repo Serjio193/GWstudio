@@ -3,7 +3,7 @@ import clsx from "clsx";
 import { getCurrentWindow, listen, safeInvoke } from "./lib/tauri";
 import { MODES, TRANSLATIONS, EMULATORS, EMULATOR_FILE_ACCEPT } from "./lib/mock";
 
-const APP_VERSION = "1.0.3";
+const APP_VERSION = "1.0.4";
 const GITHUB_REPOSITORY_URL = "https://github.com/Serjio193/GWstudio";
 const GITHUB_LATEST_RELEASE_API = "https://api.github.com/repos/Serjio193/GWstudio/releases/latest";
 const PAYPAL_THANKS_URL = "https://www.paypal.com/paypalme/SerhiiTarnopovych";
@@ -799,7 +799,7 @@ function DeviceMockup({ mode, modeName, builderSettingsOpen, selectedEmulator, s
               <img
                 src={consoleImage}
                 alt="Game & Watch Console"
-                className="relative z-10 max-h-full w-[720px] max-w-[84vw] object-contain select-none drop-shadow-[0_22px_50px_rgba(0,0,0,0.72)]"
+                className="gw-console-image relative z-10 max-h-full w-[720px] max-w-[84vw] object-contain select-none drop-shadow-[0_22px_50px_rgba(0,0,0,0.72)]"
               />
               {showScreenOverlay && (
                 <div
