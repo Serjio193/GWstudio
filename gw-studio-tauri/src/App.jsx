@@ -3,7 +3,7 @@ import clsx from "clsx";
 import { getCurrentWindow, listen, safeInvoke } from "./lib/tauri";
 import { MODES, TRANSLATIONS, EMULATORS, EMULATOR_FILE_ACCEPT } from "./lib/mock";
 
-const APP_VERSION = "1.0.6";
+const APP_VERSION = "1.0.7";
 const GITHUB_REPOSITORY_URL = "https://github.com/Serjio193/GWstudio";
 const GITHUB_LATEST_RELEASE_API = "https://api.github.com/repos/Serjio193/GWstudio/releases/latest";
 const PAYPAL_THANKS_URL = "https://www.paypal.com/paypalme/SerhiiTarnopovych";
@@ -1600,8 +1600,8 @@ function BuildActionsPanel({
         </div>
       )}
 
-      <div className="mt-6 min-h-0 flex-1 space-y-5 overflow-y-auto pr-1">
-        <div className="rounded-3xl border border-zinc-900 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.04),transparent_58%),linear-gradient(180deg,#080808_0%,#050505_100%)] p-5">
+      <div className="gw-build-details mt-6 min-h-0 flex-1 space-y-5 overflow-y-auto pr-1">
+        <div className="gw-memory-card rounded-3xl border border-zinc-900 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.04),transparent_58%),linear-gradient(180deg,#080808_0%,#050505_100%)] p-5">
           <div className="mb-4 flex items-start justify-between gap-4">
             <div>
               <div className="text-[13px] font-black uppercase tracking-[0.18em] text-zinc-300">{t.memoryUsage}</div>
@@ -5568,7 +5568,7 @@ export default function App() {
             <div
               className={clsx(
                 "gw-work-grid grid items-stretch gap-4",
-                builderSettingsOpen ? "grid-cols-[280px_minmax(0,1fr)_360px]" : "grid-cols-[minmax(0,1fr)_360px]",
+                builderSettingsOpen ? "grid-cols-[260px_minmax(0,1fr)_clamp(280px,30vw,360px)]" : "grid-cols-[minmax(0,1fr)_clamp(280px,30vw,360px)]",
               )}
             >
               {builderSettingsOpen && (

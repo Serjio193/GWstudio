@@ -157,6 +157,47 @@ body {
     height: clamp(280px, calc(100vh - 560px), 390px);
   }
 
+  .gw-build-details {
+    margin-top: 1rem !important;
+    gap: 0.85rem !important;
+  }
+
+  .gw-memory-card {
+    padding: 1rem !important;
+  }
+
+  .gw-memory-card .mb-4 {
+    margin-bottom: 0.75rem !important;
+  }
+
+  .gw-memory-card .space-y-2\.5 > :not([hidden]) ~ :not([hidden]) {
+    margin-top: 0.45rem !important;
+  }
+
+  .gw-memory-card .rounded-2xl {
+    border-radius: 0.9rem !important;
+  }
+
+  .gw-memory-card .px-4 {
+    padding-left: 0.75rem !important;
+    padding-right: 0.75rem !important;
+  }
+
+  .gw-memory-card .py-2\.5 {
+    padding-top: 0.45rem !important;
+    padding-bottom: 0.45rem !important;
+  }
+
+  .gw-memory-card .text-\[28px\],
+  .gw-memory-card .text-2xl {
+    font-size: 1.25rem !important;
+    line-height: 1.45rem !important;
+  }
+
+  .gw-memory-card .h-3 {
+    height: 0.45rem !important;
+  }
+
   .gw-hero-panel,
   .gw-device-status-panel {
     min-height: 250px !important;
@@ -170,6 +211,18 @@ body {
 
   .gw-work-grid {
     height: clamp(260px, calc(100vh - 520px), 360px);
+  }
+
+  .gw-memory-card {
+    padding: 0.85rem !important;
+  }
+
+  .gw-memory-card .text-\[13px\] {
+    font-size: 0.72rem !important;
+  }
+
+  .gw-memory-card .text-\[12px\] {
+    font-size: 0.68rem !important;
   }
 
   .gw-hero-panel,
