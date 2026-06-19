@@ -24,6 +24,14 @@ gw-studio-tauri/src-tauri/target/release/GameWatchBuilderData/
 gw-studio-tauri/.devlogs/
 *.tmp
 *.bak
+*.sig
+
+# Local release signing secrets. Never commit private keys.
+secrets/
+*.minisign.key
+*.secret
+*_private_key*
+*_release_ed25519
 
 # Local firmware dumps / test binaries
 backups/
