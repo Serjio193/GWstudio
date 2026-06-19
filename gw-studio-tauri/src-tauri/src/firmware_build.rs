@@ -183,7 +183,7 @@ fn build_firmware_bundle_blocking(
 
     let summary_path = bundle_dir.join("summary.txt");
     let manifest_path = bundle_dir.join("bundle_manifest.json");
-    let flash_script_path = bundle_dir.join("flash_bundle.ps1");
+    let flash_notes_path = bundle_dir.join("flash_bundle.txt");
     let stock_bank1_candidate = explicit_stock_file(request.stock_bank1_path.as_deref())?;
     let stock_spi_candidate = explicit_stock_file(request.stock_spi_path.as_deref())?;
     let extflash_build_path = retro_go_workspace_dir
@@ -354,7 +354,7 @@ fn build_firmware_bundle_blocking(
         "spi_full_image": true,
         "files": {
             "summary": summary_path,
-            "flash_script": flash_script_path,
+            "flash_script": flash_notes_path,
             "build_log": build_log_path,
             "roms": copied_roms,
             "previews": copied_previews,
@@ -368,10 +368,9 @@ fn build_firmware_bundle_blocking(
     .map_err(|error| format!("failed to write bundle manifest: {error}"))?;
 
     fs::write(
-        &flash_script_path,
+        &flash_notes_path,
         [
-            "$ErrorActionPreference = 'Stop'",
-            "# Build bundle prepared by GW Studio",
+            "Build bundle prepared by GW Studio",
             &format!("# Retro-Go fork workspace: {}", retro_go_workspace_dir.display()),
             &format!("# Flashable Bank1 image: {}", bank1_output_path.display()),
             &format!("# Flashable Bank2 image: {}", bank2_output_path.display()),

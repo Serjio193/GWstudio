@@ -1,12 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
-#[cfg(target_os = "windows")]
-use std::os::windows::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-
-#[cfg(target_os = "windows")]
-const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
 #[derive(Deserialize)]
 pub(crate) struct BinaryFilePathRequest {
@@ -28,14 +23,6 @@ pub(crate) struct BinFilePickerRequest {
 pub(crate) struct BinFilePickerResult {
     name: String,
     path: String,
-}
-
-fn hide_command_window(command: &mut Command) -> &mut Command {
-    #[cfg(target_os = "windows")]
-    {
-        command.creation_flags(CREATE_NO_WINDOW);
-    }
-    command
 }
 
 #[tauri::command]
@@ -72,11 +59,7 @@ pub(crate) fn reveal_path_in_explorer(request: RevealPathRequest) -> Result<(), 
 
 #[tauri::command]
 pub(crate) fn select_bin_file(request: BinFilePickerRequest) -> Result<Option<BinFilePickerResult>, String> {
-    if let Ok(result) = select_bin_file_native(&request.title, request.default_path.as_deref()) {
-        return Ok(result);
-    }
-
-    select_bin_file_powershell(&request.title, request.default_path.as_deref())
+    select_bin_file_native(&request.title, request.default_path.as_deref())
 }
 
 #[cfg(target_os = "windows")]
@@ -212,57 +195,4 @@ fn resolve_file_picker_folder(default_path: &str) -> Option<PathBuf> {
                 path.parent().map(Path::to_path_buf)
             }
         })
-}
-
-fn select_bin_file_powershell(title: &str, default_path: Option<&str>) -> Result<Option<BinFilePickerResult>, String> {
-    let title = title.replace('\'', " ");
-    let initial_dir = default_path
-        .and_then(resolve_file_picker_folder)
-        .map(|path| path.to_string_lossy().replace('\'', " "));
-    let initial_dir_script = initial_dir
-        .as_ref()
-        .map(|path| format!("$dialog.InitialDirectory = '{}'; ", path))
-        .unwrap_or_default();
-    let script = format!(
-        "Add-Type -AssemblyName System.Windows.Forms; \
-         $dialog = New-Object System.Windows.Forms.OpenFileDialog; \
-         $dialog.Title = '{}'; \
-         {}\
-         $dialog.Filter = 'Binary files (*.bin)|*.bin|All files (*.*)|*.*'; \
-         $dialog.CheckFileExists = $true; \
-         $dialog.Multiselect = $false; \
-         if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {{ [Console]::Out.Write($dialog.FileName) }}",
-        title,
-        initial_dir_script
-    );
-    let mut command = Command::new("powershell");
-    command
-        .arg("-NoProfile")
-        .arg("-STA")
-        .arg("-Command")
-        .arg(script);
-    let output = hide_command_window(&mut command)
-        .output()
-        .map_err(|error| format!("failed to open file picker: {error}"))?;
-    if !output.status.success() {
-        return Err(format!(
-            "file picker failed: {}",
-            String::from_utf8_lossy(&output.stderr).trim()
-        ));
-    }
-
-    let path_text = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    if path_text.is_empty() {
-        return Ok(None);
-    }
-    let path = PathBuf::from(&path_text);
-    let name = path
-        .file_name()
-        .and_then(|value| value.to_str())
-        .unwrap_or(&path_text)
-        .to_string();
-    Ok(Some(BinFilePickerResult {
-        name,
-        path: path_text,
-    }))
 }

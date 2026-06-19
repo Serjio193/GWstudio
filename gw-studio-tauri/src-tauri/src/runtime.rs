@@ -11,6 +11,12 @@ use std::process::{Command, Stdio};
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tauri::Emitter;
+#[cfg(target_os = "windows")]
+use windows::Win32::Foundation::CloseHandle;
+#[cfg(target_os = "windows")]
+use windows::Win32::System::Threading::{
+    OpenProcess, WaitForSingleObject, INFINITE, PROCESS_SYNCHRONIZE,
+};
 
 include!(concat!(env!("OUT_DIR"), "/portable_assets.rs"));
 
@@ -31,6 +37,22 @@ fn hide_command_window(command: &mut Command) -> &mut Command {
     }
     command
 }
+
+#[cfg(target_os = "windows")]
+fn wait_for_process_exit(pid: u32) {
+    if pid == 0 {
+        return;
+    }
+    unsafe {
+        if let Ok(handle) = OpenProcess(PROCESS_SYNCHRONIZE, false, pid) {
+            let _ = WaitForSingleObject(handle, INFINITE);
+            let _ = CloseHandle(handle);
+        }
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn wait_for_process_exit(_pid: u32) {}
 
 fn create_portable_temp_dir() -> Result<PathBuf, String> {
     let millis = SystemTime::now()
@@ -89,10 +111,40 @@ pub(crate) fn cleanup_current_portable_runtime_dir() {
     }
 }
 
-fn ps_single_quote(value: &Path) -> String {
-    value
-        .to_string_lossy()
-        .replace('\'', "''")
+pub(crate) fn handle_runtime_cleanup_helper_args() -> bool {
+    let args = std::env::args_os().collect::<Vec<_>>();
+    if args.get(1).and_then(|arg| arg.to_str()) != Some("--gw-studio-clean-runtime") {
+        return false;
+    }
+
+    let parent_pid = args
+        .get(2)
+        .and_then(|value| value.to_str())
+        .and_then(|value| value.parse::<u32>().ok())
+        .unwrap_or(0);
+    let Some(runtime_dir) = args.get(3).map(PathBuf::from) else {
+        std::process::exit(1);
+    };
+    let Some(runtime_root) = args.get(4).map(PathBuf::from) else {
+        std::process::exit(1);
+    };
+
+    wait_for_process_exit(parent_pid);
+    thread::sleep(Duration::from_millis(300));
+    for _ in 0..20 {
+        if !runtime_dir.exists() || fs::remove_dir_all(&runtime_dir).is_ok() {
+            break;
+        }
+        thread::sleep(Duration::from_millis(250));
+    }
+    if runtime_root
+        .read_dir()
+        .map(|mut entries| entries.next().is_none())
+        .unwrap_or(false)
+    {
+        let _ = fs::remove_dir(&runtime_root);
+    }
+    std::process::exit(0);
 }
 
 pub(crate) fn spawn_runtime_cleanup_helper() {
@@ -100,27 +152,15 @@ pub(crate) fn spawn_runtime_cleanup_helper() {
         return;
     };
     let runtime_root = host_root().join("GWStudioRuntime");
-    let pid = std::process::id();
-    let script = format!(
-        "$ErrorActionPreference='SilentlyContinue'; \
-         Wait-Process -Id {pid}; \
-         Start-Sleep -Milliseconds 300; \
-         Remove-Item -LiteralPath '{}' -Recurse -Force; \
-         if ((Test-Path -LiteralPath '{}') -and -not (Get-ChildItem -LiteralPath '{}' -Force)) {{ Remove-Item -LiteralPath '{}' -Force }}",
-        ps_single_quote(&runtime_dir),
-        ps_single_quote(&runtime_root),
-        ps_single_quote(&runtime_root),
-        ps_single_quote(&runtime_root),
-    );
-    let mut command = Command::new("powershell.exe");
+    let Ok(exe_path) = std::env::current_exe() else {
+        return;
+    };
+    let mut command = Command::new(exe_path);
     command
-        .arg("-NoProfile")
-        .arg("-ExecutionPolicy")
-        .arg("Bypass")
-        .arg("-WindowStyle")
-        .arg("Hidden")
-        .arg("-Command")
-        .arg(script)
+        .arg("--gw-studio-clean-runtime")
+        .arg(std::process::id().to_string())
+        .arg(runtime_dir)
+        .arg(runtime_root)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null());

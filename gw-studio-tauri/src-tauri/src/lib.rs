@@ -37,9 +37,15 @@ mod spi_helper;
 mod startup;
 
 use paths::*;
-use runtime::{cleanup_current_portable_runtime_dir, prepare_portable_runtime, spawn_runtime_cleanup_helper};
+use runtime::{
+    cleanup_current_portable_runtime_dir, handle_runtime_cleanup_helper_args,
+    prepare_portable_runtime, spawn_runtime_cleanup_helper,
+};
 use service_bridge::start_service_bridge_listener;
-use updater::{app_sha256, install_app_update, open_external_url};
+use updater::{
+    app_sha256, cleanup_stale_update_dir, handle_update_helper_args, install_app_update,
+    open_external_url,
+};
 use file_picker::{read_binary_file, reveal_path_in_explorer, select_bin_file};
 use thumbnails::{load_thumbnail_cache, save_thumbnail_cache};
 use roms::{import_rom_files, import_rom_files_auto, import_rom_paths_auto};
@@ -66,6 +72,10 @@ use firmware_build::build_firmware_bundle;
 use startup::{show_startup_error, PortableRuntimeReadyEvent};
 
 pub fn run() {
+    if handle_update_helper_args() || handle_runtime_cleanup_helper_args() {
+        return;
+    }
+
     if let Err(error) = validate_exe_path_for_portable_runtime() {
         show_startup_error(&error);
         return;
@@ -76,6 +86,7 @@ pub fn run() {
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.set_theme(Some(tauri::Theme::Dark));
             }
+            cleanup_stale_update_dir();
             let app_handle = app.handle().clone();
             thread::spawn(move || {
                 let event = match prepare_portable_runtime(&app_handle) {

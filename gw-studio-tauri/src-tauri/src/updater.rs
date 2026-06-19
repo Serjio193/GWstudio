@@ -3,9 +3,25 @@ use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use std::fs;
 #[cfg(target_os = "windows")]
+use std::os::windows::ffi::OsStrExt;
+#[cfg(target_os = "windows")]
 use std::os::windows::process::CommandExt;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::thread;
+use std::time::Duration;
+#[cfg(target_os = "windows")]
+use windows::core::PCWSTR;
+#[cfg(target_os = "windows")]
+use windows::Win32::Foundation::CloseHandle;
+#[cfg(target_os = "windows")]
+use windows::Win32::Storage::FileSystem::{MoveFileExW, MOVEFILE_REPLACE_EXISTING};
+#[cfg(target_os = "windows")]
+use windows::Win32::System::Com::Urlmon::URLDownloadToFileW;
+#[cfg(target_os = "windows")]
+use windows::Win32::System::Threading::{
+    OpenProcess, WaitForSingleObject, INFINITE, PROCESS_SYNCHRONIZE,
+};
 
 #[cfg(target_os = "windows")]
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
@@ -30,12 +46,77 @@ fn hide_command_window(command: &mut Command) -> &mut Command {
     command
 }
 
-fn ps_single_quote_text(value: &str) -> String {
-    value.replace('\'', "''")
+#[cfg(target_os = "windows")]
+fn to_wide(value: impl AsRef<std::ffi::OsStr>) -> Vec<u16> {
+    value.as_ref().encode_wide().chain(std::iter::once(0)).collect()
 }
 
-fn ps_single_quote(value: &Path) -> String {
-    value.to_string_lossy().replace('\'', "''")
+#[cfg(target_os = "windows")]
+fn wait_for_process_exit(pid: u32) {
+    if pid == 0 {
+        return;
+    }
+    unsafe {
+        if let Ok(handle) = OpenProcess(PROCESS_SYNCHRONIZE, false, pid) {
+            let _ = WaitForSingleObject(handle, INFINITE);
+            let _ = CloseHandle(handle);
+        }
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn wait_for_process_exit(_pid: u32) {}
+
+#[cfg(target_os = "windows")]
+fn download_file(url: &str, destination: &Path) -> Result<(), String> {
+    let url_wide = to_wide(url);
+    let destination_wide = to_wide(destination.as_os_str());
+    unsafe {
+        URLDownloadToFileW(
+            None,
+            PCWSTR(url_wide.as_ptr()),
+            PCWSTR(destination_wide.as_ptr()),
+            0,
+            None,
+        )
+    }
+    .map_err(|error| format!("update download failed: {error}"))
+}
+
+#[cfg(not(target_os = "windows"))]
+fn download_file(_url: &str, _destination: &Path) -> Result<(), String> {
+    Err("app update download is only implemented on Windows".to_string())
+}
+
+#[cfg(target_os = "windows")]
+fn move_file_replace(source: &Path, destination: &Path) -> Result<(), String> {
+    let source_wide = to_wide(source.as_os_str());
+    let destination_wide = to_wide(destination.as_os_str());
+    unsafe {
+        MoveFileExW(
+            PCWSTR(source_wide.as_ptr()),
+            PCWSTR(destination_wide.as_ptr()),
+            MOVEFILE_REPLACE_EXISTING,
+        )
+    }
+    .map_err(|error| {
+        format!(
+            "failed to replace {} with {}: {error}",
+            destination.display(),
+            source.display()
+        )
+    })
+}
+
+#[cfg(not(target_os = "windows"))]
+fn move_file_replace(source: &Path, destination: &Path) -> Result<(), String> {
+    fs::rename(source, destination).map_err(|error| {
+        format!(
+            "failed to replace {} with {}: {error}",
+            destination.display(),
+            source.display()
+        )
+    })
 }
 
 fn allowed_external_url(url: &str) -> bool {
@@ -49,6 +130,95 @@ fn allowed_external_url(url: &str) -> bool {
 
 fn allowed_update_download_url(url: &str) -> bool {
     url.starts_with("https://github.com/Serjio193/GWstudio/releases/download/")
+}
+
+pub(crate) fn cleanup_stale_update_dir() {
+    let update_dir = host_root().join("GWStudioUpdate");
+    if update_dir.exists() {
+        let _ = fs::remove_dir_all(update_dir);
+    }
+}
+
+pub(crate) fn handle_update_helper_args() -> bool {
+    let args = std::env::args_os().collect::<Vec<_>>();
+    if args.get(1).and_then(|arg| arg.to_str()) != Some("--gw-studio-apply-update") {
+        return false;
+    }
+
+    let exit_code = match run_update_helper(&args) {
+        Ok(()) => 0,
+        Err(error) => {
+            let error_dir = args
+                .get(6)
+                .map(PathBuf::from)
+                .unwrap_or_else(|| host_root().join("GWStudioUpdate"));
+            let _ = fs::create_dir_all(&error_dir);
+            let _ = fs::write(
+                error_dir.join("apply_update_error.log"),
+                error,
+            );
+            1
+        }
+    };
+    std::process::exit(exit_code);
+}
+
+fn run_update_helper(args: &[std::ffi::OsString]) -> Result<(), String> {
+    let parent_pid = args
+        .get(2)
+        .and_then(|value| value.to_str())
+        .and_then(|value| value.parse::<u32>().ok())
+        .ok_or_else(|| "missing update helper parent pid".to_string())?;
+    let update_exe = PathBuf::from(
+        args.get(3)
+            .ok_or_else(|| "missing update helper source exe".to_string())?,
+    );
+    let target_exe = PathBuf::from(
+        args.get(4)
+            .ok_or_else(|| "missing update helper target exe".to_string())?,
+    );
+    let working_dir = PathBuf::from(
+        args.get(5)
+            .ok_or_else(|| "missing update helper working dir".to_string())?,
+    );
+    let update_dir = PathBuf::from(
+        args.get(6)
+            .ok_or_else(|| "missing update helper update dir".to_string())?,
+    );
+
+    wait_for_process_exit(parent_pid);
+    thread::sleep(Duration::from_millis(500));
+
+    let mut last_error = None;
+    for _ in 0..40 {
+        match move_file_replace(&update_exe, &target_exe) {
+            Ok(()) => {
+                last_error = None;
+                break;
+            }
+            Err(error) => {
+                last_error = Some(error);
+                thread::sleep(Duration::from_millis(250));
+            }
+        }
+    }
+    if let Some(error) = last_error {
+        return Err(error);
+    }
+
+    let mut command = Command::new(&target_exe);
+    command
+        .current_dir(&working_dir)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+    hide_command_window(&mut command)
+        .spawn()
+        .map_err(|error| format!("failed to restart updated app: {error}"))?;
+
+    let _ = fs::remove_file(update_exe);
+    let _ = fs::remove_dir_all(update_dir);
+    Ok(())
 }
 
 #[tauri::command]
@@ -115,6 +285,7 @@ pub(crate) async fn install_app_update(
             .ok_or_else(|| "failed to resolve current exe dir".to_string())?
             .to_path_buf();
         let update_dir = host_root().join("GWStudioUpdate");
+        cleanup_stale_update_dir();
         fs::create_dir_all(&update_dir)
             .map_err(|error| format!("failed to create update dir {}: {error}", update_dir.display()))?;
 
@@ -124,36 +295,7 @@ pub(crate) async fn install_app_update(
             .filter(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '.' | '-' | '_'))
             .collect::<String>();
         let update_exe = update_dir.join(format!("GW Studio-{version_safe}.update.exe"));
-
-        let download_script = format!(
-            "$ErrorActionPreference='Stop'; \
-             $ProgressPreference='SilentlyContinue'; \
-             [Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12; \
-             Invoke-WebRequest -UseBasicParsing -Uri '{}' -OutFile '{}'",
-            ps_single_quote_text(download_url),
-            ps_single_quote(&update_exe),
-        );
-        let mut download_command = Command::new("powershell.exe");
-        download_command
-            .arg("-NoProfile")
-            .arg("-ExecutionPolicy")
-            .arg("Bypass")
-            .arg("-WindowStyle")
-            .arg("Hidden")
-            .arg("-Command")
-            .arg(download_script)
-            .stdin(Stdio::null())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped());
-        let output = hide_command_window(&mut download_command)
-            .output()
-            .map_err(|error| format!("failed to start update download: {error}"))?;
-        if !output.status.success() {
-            return Err(format!(
-                "update download failed: {}",
-                String::from_utf8_lossy(&output.stderr).trim()
-            ));
-        }
+        download_file(download_url, &update_exe)?;
         let metadata = fs::metadata(&update_exe)
             .map_err(|error| format!("failed to stat downloaded update: {error}"))?;
         if metadata.len() < 10 * 1024 * 1024 {
@@ -174,34 +316,18 @@ pub(crate) async fn install_app_update(
             }
         }
 
-        let script_path = update_dir.join("apply_update.ps1");
-        let script = format!(
-            "$ErrorActionPreference='Stop'\n\
-             Wait-Process -Id {} -ErrorAction SilentlyContinue\n\
-             Start-Sleep -Milliseconds 500\n\
-             Move-Item -LiteralPath '{}' -Destination '{}' -Force\n\
-             Start-Process -FilePath '{}' -WorkingDirectory '{}'\n\
-             Start-Sleep -Milliseconds 300\n\
-             Remove-Item -LiteralPath '{}' -Force -ErrorAction SilentlyContinue\n",
-            std::process::id(),
-            ps_single_quote(&update_exe),
-            ps_single_quote(&exe_path),
-            ps_single_quote(&exe_path),
-            ps_single_quote(&exe_dir),
-            ps_single_quote(&script_path),
-        );
-        fs::write(&script_path, script)
-            .map_err(|error| format!("failed to write update script: {error}"))?;
+        let helper_exe = update_dir.join("GWStudioUpdateHelper.exe");
+        fs::copy(&exe_path, &helper_exe)
+            .map_err(|error| format!("failed to prepare update helper: {error}"))?;
 
-        let mut apply_command = Command::new("powershell.exe");
+        let mut apply_command = Command::new(&helper_exe);
         apply_command
-            .arg("-NoProfile")
-            .arg("-ExecutionPolicy")
-            .arg("Bypass")
-            .arg("-WindowStyle")
-            .arg("Hidden")
-            .arg("-File")
-            .arg(&script_path)
+            .arg("--gw-studio-apply-update")
+            .arg(std::process::id().to_string())
+            .arg(&update_exe)
+            .arg(&exe_path)
+            .arg(&exe_dir)
+            .arg(&update_dir)
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null());
