@@ -3,7 +3,7 @@ import clsx from "clsx";
 import { getCurrentWindow, listen, safeInvoke } from "./lib/tauri";
 import { MODES, TRANSLATIONS, EMULATORS, EMULATOR_FILE_ACCEPT } from "./lib/mock";
 
-const APP_VERSION = "1.0.12";
+const DEFAULT_APP_VERSION = "0.0.0";
 const GITHUB_REPOSITORY_URL = "https://github.com/Serjio193/GWstudio";
 const GITHUB_LATEST_RELEASE_API = "https://api.github.com/repos/Serjio193/GWstudio/releases/latest";
 const PAYPAL_THANKS_URL = "https://www.paypal.com/paypalme/SerhiiTarnopovych";
@@ -546,7 +546,7 @@ function StatRow({ label, value, valueClass = "text-zinc-100" }) {
   );
 }
 
-function StartupOverlay({ sha256, progress, message }) {
+function StartupOverlay({ version, sha256, progress, message }) {
   const shortSha = sha256 ? `${sha256.slice(0, 16)}...${sha256.slice(-12)}` : "calculating...";
   const safeProgress = Math.max(0, Math.min(100, Number(progress ?? 0)));
   return (
@@ -557,7 +557,7 @@ function StartupOverlay({ sha256, progress, message }) {
           GW
         </div>
         <div className="mt-7 text-3xl font-black tracking-wide text-white">GW Studio</div>
-        <div className="mt-2 text-sm font-bold uppercase tracking-[0.32em] text-emerald-300">version {APP_VERSION}</div>
+        <div className="mt-2 text-sm font-bold uppercase tracking-[0.32em] text-emerald-300">version {version || DEFAULT_APP_VERSION}</div>
         <div className="mt-5 rounded-2xl border border-zinc-800 bg-black/60 px-5 py-3 font-mono text-xs text-zinc-300">
           SHA256: {shortSha}
         </div>
@@ -2550,6 +2550,7 @@ export default function App() {
     "[info] Rust commands will replace PySide handlers here",
   ]);
   const [startupLoading, setStartupLoading] = useState(true);
+  const [appVersion, setAppVersion] = useState(DEFAULT_APP_VERSION);
   const [appSha256, setAppSha256] = useState("");
   const [startupProgress, setStartupProgress] = useState(0);
   const [startupMessage, setStartupMessage] = useState("Preparing runtime");
@@ -2744,7 +2745,7 @@ export default function App() {
     }
     setConfirmAction({
       title: t.updateConfirmTitle.replace("{version}", info.version),
-      message: t.updateConfirmMessage.replace("{current}", APP_VERSION).replace("{version}", info.version),
+      message: t.updateConfirmMessage.replace("{current}", appVersion).replace("{version}", info.version),
       confirmText: t.updateNow,
       cancelText: t.no,
       tone: "emerald",
@@ -2799,14 +2800,14 @@ export default function App() {
         sha256: expectedSha,
         releaseUrl: release.html_url || GITHUB_REPOSITORY_URL,
       };
-      const isNewer = compareVersions(latestVersion, APP_VERSION) > 0;
+      const isNewer = compareVersions(latestVersion, appVersion) > 0;
       setUpdateAvailable(isNewer);
       setUpdateInfo(isNewer ? latestInfo : null);
       setLogs((items) => [
         ...items,
         isNewer
-          ? `[update] Available: ${APP_VERSION} -> ${latestVersion}`
-          : `[update] Current version is up to date (${APP_VERSION})`,
+          ? `[update] Available: ${appVersion} -> ${latestVersion}`
+          : `[update] Current version is up to date (${appVersion})`,
       ]);
 
       if (isNewer) {
@@ -2958,7 +2959,7 @@ export default function App() {
 
     async function finishStartupStatus(runtimeMessage = "") {
       const startedAt = Date.now();
-      const [status, sha] = await Promise.all([
+      const [status, sha, version] = await Promise.all([
         safeInvoke("runtime_status", {}, () => ({
           workspace_root: "GameWatchBuilderData",
           logs_dir: "GameWatchBuilderData/logs",
@@ -2968,15 +2969,18 @@ export default function App() {
           rust_backend: "fallback",
         })),
         safeInvoke("app_sha256", {}, () => ""),
+        safeInvoke("app_version", {}, () => DEFAULT_APP_VERSION),
       ]);
 
         if (cancelled) {
           return;
         }
+        const resolvedVersion = version || DEFAULT_APP_VERSION;
+        setAppVersion(resolvedVersion);
         setAppSha256(sha || "");
         setLogs((items) => [
           ...items,
-          `[app] version=${APP_VERSION}`,
+          `[app] version=${resolvedVersion}`,
           ...(sha ? [`[app] sha256=${sha}`] : []),
           ...(runtimeMessage ? [`[runtime] ${runtimeMessage}`] : []),
           `[runtime] workspace=${status.workspace_root}`,
@@ -5380,7 +5384,7 @@ export default function App() {
       }}
       onDrop={nativeDragDropAvailable ? undefined : handleGlobalDrop}
     >
-      {startupLoading && <StartupOverlay sha256={appSha256} progress={startupProgress} message={startupMessage} />}
+      {startupLoading && <StartupOverlay version={appVersion} sha256={appSha256} progress={startupProgress} message={startupMessage} />}
       <main className="h-screen min-w-0 flex flex-col overflow-hidden">
         {isDragActive && (
           <div className="pointer-events-none fixed inset-0 z-[100] flex items-center justify-center bg-black/55 backdrop-blur-[2px]">
@@ -5458,7 +5462,7 @@ export default function App() {
               GW
             </div>
             <div className="text-3xl font-black leading-8">GW Studio</div>
-            <div className="rounded-full border border-zinc-800 px-3 py-1 font-mono text-xs text-zinc-500">v{APP_VERSION}</div>
+            <div className="rounded-full border border-zinc-800 px-3 py-1 font-mono text-xs text-zinc-500">v{appVersion}</div>
           </div>
 
           <div className="flex items-center gap-3 rounded-3xl border border-zinc-800 bg-black/30 px-3 py-2 shadow-[0_0_25px_rgba(0,0,0,0.35)]">

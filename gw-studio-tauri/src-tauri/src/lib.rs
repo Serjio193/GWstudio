@@ -59,7 +59,7 @@ use backup_read::{
 use flash::{
     write_bank1_firmware, write_bank2_firmware, write_spi_firmware,
 };
-use app_status::runtime_status;
+use app_status::{app_version, runtime_status};
 use bundle_lookup::latest_firmware_bundle;
 use build_metrics::compute_build_metrics;
 use firmware_build::build_firmware_bundle;
@@ -111,6 +111,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             runtime_status,
+            app_version,
             app_sha256,
             open_external_url,
             install_app_update,

@@ -31,3 +31,8 @@ pub(crate) fn runtime_status() -> RuntimeStatus {
         rust_backend: "active",
     }
 }
+
+#[tauri::command]
+pub(crate) fn app_version() -> &'static str {
+    env!("CARGO_PKG_VERSION")
+}
