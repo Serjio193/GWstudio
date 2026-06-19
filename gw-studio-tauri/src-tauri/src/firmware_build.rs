@@ -1,7 +1,8 @@
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::bios::{copy_coleco_bios_to_workspace, copy_msx_bios_to_workspace};
 use crate::build_events::emit_build_progress;
@@ -317,7 +318,22 @@ fn build_firmware_bundle_blocking(
     }
     fs::write(&summary_path, summary_lines.join("\n")).map_err(|error| format!("failed to write bundle summary: {error}"))?;
 
+    let mut firmware_artifacts = Vec::new();
+    if let Some(path) = bank1_output.as_ref() {
+        firmware_artifacts.push(firmware_artifact_json("bank1", &firmware_profile, path, Some(0))?);
+    }
+    if let Some(path) = bank2_output.as_ref() {
+        firmware_artifacts.push(firmware_artifact_json("bank2", &firmware_profile, path, Some(0))?);
+    }
+    firmware_artifacts.push(firmware_artifact_json(
+        "spi",
+        &firmware_profile,
+        &spi_output,
+        Some(0),
+    )?);
+
     let manifest = serde_json::json!({
+        "manifest_version": 2,
         "bundle_name": bundle_name,
         "firmware_profile": request.firmware_profile,
         "firmware_code": firmware_profile,
@@ -352,6 +368,7 @@ fn build_firmware_bundle_blocking(
         "extflash_build_size_bytes": spi_output_size_bytes,
         "retro_go_extflash_payload_size_bytes": extflash_build_size_bytes,
         "spi_full_image": true,
+        "firmware_artifacts": firmware_artifacts,
         "files": {
             "summary": summary_path,
             "flash_script": flash_notes_path,
@@ -406,4 +423,30 @@ fn build_firmware_bundle_blocking(
         image_bytes,
         total_bytes,
     })
+}
+
+fn sha256_file(path: &Path) -> Result<String, String> {
+    let bytes = fs::read(path)
+        .map_err(|error| format!("failed to read {} for SHA256: {error}", path.display()))?;
+    Ok(format!("{:x}", Sha256::digest(&bytes)))
+}
+
+fn firmware_artifact_json(
+    target: &str,
+    firmware_code: &str,
+    path: &Path,
+    offset_bytes: Option<u64>,
+) -> Result<serde_json::Value, String> {
+    let size_bytes = fs::metadata(path)
+        .map_err(|error| format!("failed to stat firmware artifact {}: {error}", path.display()))?
+        .len();
+    Ok(serde_json::json!({
+        "target": target,
+        "firmware_code": firmware_code,
+        "path": path,
+        "file_name": path.file_name().and_then(|value| value.to_str()).unwrap_or_default(),
+        "size_bytes": size_bytes,
+        "sha256": sha256_file(path)?,
+        "offset_bytes": offset_bytes,
+    }))
 }

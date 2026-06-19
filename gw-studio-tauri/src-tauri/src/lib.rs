@@ -1,3 +1,5 @@
+#![recursion_limit = "256"]
+
 use std::thread;
 use tauri::{Emitter, Manager};
 use tauri::WindowEvent;
