@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import clsx from "clsx";
 import { getCurrentWindow, listen, safeInvoke } from "./lib/tauri";
-import { MODES, TRANSLATIONS, EMULATORS, EMULATOR_FILE_ACCEPT } from "./lib/mock";
+import { MODES, TRANSLATIONS, EMULATORS, EMULATOR_FILE_ACCEPT } from "./lib/appData";
 
 const DEFAULT_APP_VERSION = "0.0.0";
 const GITHUB_REPOSITORY_URL = "https://github.com/Serjio193/GWstudio";
