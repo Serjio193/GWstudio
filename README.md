@@ -144,7 +144,8 @@ You can also run the same check from Settings with `Update program`.
 
 ## Links
 
-- Repository: https://github.com/Serjio193/GWstudio
+- [Latest release](https://github.com/Serjio193/GWstudio/releases/latest)
+- [Report an issue](https://github.com/Serjio193/GWstudio/issues)o
 
 ## Support
 
