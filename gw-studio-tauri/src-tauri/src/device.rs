@@ -180,11 +180,7 @@ fn read_info_frequency_attempts(requested_frequency: u32) -> Vec<u32> {
         requested_frequency,
         8_000_000,
         4_000_000,
-        2_000_000,
         1_000_000,
-        500_000,
-        240_000,
-        100_000,
     ] {
         if value > 0 && !attempts.contains(&value) {
             attempts.push(value);
@@ -199,7 +195,7 @@ fn run_gnwmanager_info_with_frequency_fallback(
 ) -> Result<(Output, u32), String> {
     let mut last_error = String::new();
     for candidate_frequency in read_info_frequency_attempts(frequency) {
-        match run_gnwmanager_info_with_retries(backend, candidate_frequency, 2) {
+        match run_gnwmanager_info_with_retries(backend, candidate_frequency, 1) {
             Ok(output) => return Ok((output, candidate_frequency)),
             Err(error) => {
                 last_error = format!("freq {candidate_frequency}: {error}");
@@ -399,12 +395,12 @@ pub(crate) async fn read_device_info(_app: tauri::AppHandle, backend: String, fr
     tauri::async_runtime::spawn_blocking(move || {
         let _requested_backend = backend;
         let used_backend = "pyocd".to_string();
-        let (text, used_frequency, info_source) = match run_gnwmanager_info_with_frequency_fallback(&used_backend, frequency) {
-            Ok((output, used_frequency)) => (output_text(&output), used_frequency, "gnwmanager"),
-            Err(gnwmanager_error) => {
-                let (text, used_frequency) = run_direct_info_with_frequency_fallback(frequency)
-                    .map_err(|direct_error| format!("{gnwmanager_error}; {direct_error}"))?;
-                (text, used_frequency, "direct under-reset")
+        let (text, used_frequency, info_source) = match run_direct_info_with_frequency_fallback(frequency) {
+            Ok((text, used_frequency)) => (text, used_frequency, "direct under-reset"),
+            Err(direct_error) => {
+                let (output, used_frequency) = run_gnwmanager_info_with_frequency_fallback(&used_backend, frequency)
+                    .map_err(|gnwmanager_error| format!("{direct_error}; {gnwmanager_error}"))?;
+                (output_text(&output), used_frequency, "gnwmanager")
             }
         };
 

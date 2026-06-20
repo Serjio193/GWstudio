@@ -43,8 +43,8 @@ pub(crate) struct AppUpdateInstallRequest {
 
 const RELEASE_SIGNATURE_NAMESPACE: &str = "gwstudio-release";
 const RELEASE_PUBLIC_KEY_B64: &str = "AAAAC3NzaC1lZDI1NTE5AAAAIOhA2J9ebY5gZfLfMJ+0uFEBL/QFWab74GLqEG6nOq3u";
-const RELEASE_EXE_ASSET_NAME: &str = "gw_studio_tauri.exe";
-const RELEASE_SIGNATURE_ASSET_NAME: &str = "gw_studio_tauri.exe.sig";
+const RELEASE_EXE_ASSET_NAME: &str = "GWStudio.exe";
+const RELEASE_SIGNATURE_ASSET_NAME: &str = "GWStudio.exe.sig";
 
 fn hide_command_window(command: &mut Command) -> &mut Command {
     #[cfg(target_os = "windows")]

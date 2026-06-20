@@ -14,26 +14,27 @@ Local private file, never commit:
 Sign the release executable:
 
 ```powershell
-ssh-keygen -Y sign -f .\secrets\gwstudio_release_ed25519_v2 -n gwstudio-release .\gw-studio-tauri\src-tauri\target\release\gw_studio_tauri.exe
+Copy-Item .\gw-studio-tauri\src-tauri\target\release\gw_studio_tauri.exe .\gw-studio-tauri\src-tauri\target\release\GWStudio.exe -Force
+ssh-keygen -Y sign -f .\secrets\gwstudio_release_ed25519_v2 -n gwstudio-release .\gw-studio-tauri\src-tauri\target\release\GWStudio.exe
 ```
 
 This creates:
 
 ```text
-gw_studio_tauri.exe.sig
+GWStudio.exe.sig
 ```
 
 Verify the signature:
 
 ```powershell
-cmd /c "type ""%CD%\gw-studio-tauri\src-tauri\target\release\gw_studio_tauri.exe"" | ssh-keygen -Y verify -f ""%CD%\release_keys\allowed_signers"" -I gwstudio-release -n gwstudio-release -s ""%CD%\gw-studio-tauri\src-tauri\target\release\gw_studio_tauri.exe.sig"""
+cmd /c "type ""%CD%\gw-studio-tauri\src-tauri\target\release\GWStudio.exe"" | ssh-keygen -Y verify -f ""%CD%\release_keys\allowed_signers"" -I gwstudio-release -n gwstudio-release -s ""%CD%\gw-studio-tauri\src-tauri\target\release\GWStudio.exe.sig"""
 ```
 
 Release upload should include:
 
-- `gw_studio_tauri.exe`
-- `gw_studio_tauri.exe.sha256`
-- `gw_studio_tauri.exe.sig`
+- `GWStudio.exe`
+- `GWStudio.exe.sha256`
+- `GWStudio.exe.sig`
 
 Security rule:
 

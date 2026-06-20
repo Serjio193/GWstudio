@@ -2712,9 +2712,12 @@ export default function App() {
       const release = await response.json();
       const latestVersion = String(release.tag_name || release.name || "").replace(/^v/i, "");
       const assets = Array.isArray(release.assets) ? release.assets : [];
-      const exeAsset = assets.find((asset) => String(asset.name ?? "").toLowerCase() === RELEASE_EXE_ASSET_NAME);
-      const shaAsset = assets.find((asset) => String(asset.name ?? "").toLowerCase() === RELEASE_SHA256_ASSET_NAME);
-      const sigAsset = assets.find((asset) => String(asset.name ?? "").toLowerCase() === RELEASE_SIGNATURE_ASSET_NAME);
+      const exeAssetName = RELEASE_EXE_ASSET_NAME.toLowerCase();
+      const shaAssetName = RELEASE_SHA256_ASSET_NAME.toLowerCase();
+      const sigAssetName = RELEASE_SIGNATURE_ASSET_NAME.toLowerCase();
+      const exeAsset = assets.find((asset) => String(asset.name ?? "").toLowerCase() === exeAssetName);
+      const shaAsset = assets.find((asset) => String(asset.name ?? "").toLowerCase() === shaAssetName);
+      const sigAsset = assets.find((asset) => String(asset.name ?? "").toLowerCase() === sigAssetName);
 
       if (!latestVersion || !exeAsset?.browser_download_url) {
         throw new Error(`latest release does not contain ${RELEASE_EXE_ASSET_NAME}`);

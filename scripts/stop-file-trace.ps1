@@ -31,6 +31,7 @@ if (-not (Test-Path -LiteralPath $csv)) {
 }
 
 $interestingProcesses = @(
+  "GWStudio.exe",
   "gw_studio_tauri.exe",
   "bash.exe",
   "sh.exe",
