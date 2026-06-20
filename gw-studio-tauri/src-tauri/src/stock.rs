@@ -1,9 +1,20 @@
 use crate::paths::host_root;
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::fs;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
+
+const STOCK_BANK1_M_CRC32: u32 = 0xefaaefe6;
+const STOCK_BANK1_Z_CRC32: u32 = 0x3420bccf;
+const STOCK_SPI_M_CRC32: u32 = 0x5f40d6bb;
+const STOCK_SPI_Z_CRC32: u32 = 0x07a478d4;
+
+const STOCK_BANK1_M_SHA256: &str = "b1f10bde11490dcf922524fcba1592ffbc47d2b9a95cda58358ab8934c747e5b";
+const STOCK_BANK1_Z_SHA256: &str = "ab37ba03bc33682c091b4e7caffd7d3102b83e675377e06d6d3046b9bf483bb6";
+const STOCK_SPI_M_REGION_SHA256: &str = "1fc20dbc3603b12abeec2cd902c2518ed639a58a94a17d5ef1d66cce72b71322";
+const STOCK_SPI_Z_REGION_SHA256: &str = "d575a291156c49cd2dd4c8faf621db292f2988af2243a24dbe5f75c4130b595b";
 
 #[derive(Deserialize)]
 pub(crate) struct StockBackupImportRequest {
@@ -87,10 +98,31 @@ fn read_file_prefix(source: &Path, max_bytes: usize) -> Result<Vec<u8>, String> 
     Ok(data)
 }
 
+fn sha256_hex(data: &[u8]) -> String {
+    format!("{:x}", Sha256::digest(data))
+}
+
+fn expected_stock_bank1_hashes(profile_code: &str) -> (u32, &'static str) {
+    if profile_code == "z" {
+        (STOCK_BANK1_Z_CRC32, STOCK_BANK1_Z_SHA256)
+    } else {
+        (STOCK_BANK1_M_CRC32, STOCK_BANK1_M_SHA256)
+    }
+}
+
+fn expected_stock_spi_hash(profile_code: &str) -> (u32, &'static str) {
+    if profile_code == "z" {
+        (STOCK_SPI_Z_CRC32, STOCK_SPI_Z_REGION_SHA256)
+    } else {
+        (STOCK_SPI_M_CRC32, STOCK_SPI_M_REGION_SHA256)
+    }
+}
+
 pub(crate) fn validate_stock_bank1_file(stock_bank1_path: &Path, profile_code: &str) -> Result<(), String> {
     let bank1 = read_file_prefix(stock_bank1_path, 128 * 1024)?;
     let bank1_crc = crc32fast::hash(&bank1);
-    let expected_bank1_crc = if profile_code == "z" { 0x3420bccf } else { 0xefaaefe6 };
+    let bank1_sha256 = sha256_hex(&bank1);
+    let (expected_bank1_crc, expected_bank1_sha256) = expected_stock_bank1_hashes(profile_code);
     if bank1_crc != expected_bank1_crc {
         return Err(format!(
             "Selected Bank1 is not a valid {} stock firmware for dualboot patch: {} (CRC32 {:08X}, expected {:08X})",
@@ -100,18 +132,30 @@ pub(crate) fn validate_stock_bank1_file(stock_bank1_path: &Path, profile_code: &
             expected_bank1_crc
         ));
     }
+    if bank1_sha256 != expected_bank1_sha256 {
+        return Err(format!(
+            "Selected Bank1 is not a valid {} stock firmware for dualboot patch: {} (SHA256 {}, expected {})",
+            profile_code.to_ascii_uppercase(),
+            stock_bank1_path.display(),
+            bank1_sha256,
+            expected_bank1_sha256
+        ));
+    }
     Ok(())
 }
 
 pub(crate) fn detect_stock_bank1_profile(stock_bank1_path: &Path) -> Result<&'static str, String> {
     let bank1 = read_file_prefix(stock_bank1_path, 128 * 1024)?;
-    match crc32fast::hash(&bank1) {
-        0xefaaefe6 => Ok("m"),
-        0x3420bccf => Ok("z"),
-        crc => Err(format!(
-            "Selected Bank1 is not a known original Mario/Zelda stock firmware: {} (CRC32 {:08X})",
+    let bank1_crc = crc32fast::hash(&bank1);
+    let bank1_sha256 = sha256_hex(&bank1);
+    match (bank1_crc, bank1_sha256.as_str()) {
+        (STOCK_BANK1_M_CRC32, STOCK_BANK1_M_SHA256) => Ok("m"),
+        (STOCK_BANK1_Z_CRC32, STOCK_BANK1_Z_SHA256) => Ok("z"),
+        (crc, sha256) => Err(format!(
+            "Selected Bank1 is not a known original Mario/Zelda stock firmware: {} (CRC32 {:08X}, SHA256 {})",
             stock_bank1_path.display(),
-            crc
+            crc,
+            sha256
         )),
     }
 }
@@ -119,7 +163,7 @@ pub(crate) fn detect_stock_bank1_profile(stock_bank1_path: &Path) -> Result<&'st
 pub(crate) fn validate_stock_spi_file(stock_spi_path: &Path, profile_code: &str) -> Result<(), String> {
     let stock_spi = fs::read(stock_spi_path)
         .map_err(|error| format!("failed to read stock SPI {}: {error}", stock_spi_path.display()))?;
-    let (spi_region, expected_spi_crc) = if profile_code == "z" {
+    let (spi_region, (expected_spi_crc, expected_spi_sha256)) = if profile_code == "z" {
         let start = 0x20000_usize;
         let end = 0x3254A0_usize;
         if stock_spi.len() < end {
@@ -129,7 +173,7 @@ pub(crate) fn validate_stock_spi_file(stock_spi_path: &Path, profile_code: &str)
                 end
             ));
         }
-        (&stock_spi[start..end], 0x07a478d4_u32)
+        (&stock_spi[start..end], expected_stock_spi_hash("z"))
     } else {
         let strip_tail = 8192_usize;
         let min_len = (1024 * 1024) as usize;
@@ -140,9 +184,10 @@ pub(crate) fn validate_stock_spi_file(stock_spi_path: &Path, profile_code: &str)
                 min_len
             ));
         }
-        (&stock_spi[..min_len - strip_tail], 0x5f40d6bb_u32)
+        (&stock_spi[..min_len - strip_tail], expected_stock_spi_hash("m"))
     };
     let spi_crc = crc32fast::hash(spi_region);
+    let spi_sha256 = sha256_hex(spi_region);
     if spi_crc != expected_spi_crc {
         return Err(format!(
             "Selected SPI is not a valid {} stock firmware for dualboot patch: {} (CRC32 {:08X}, expected {:08X})",
@@ -150,6 +195,15 @@ pub(crate) fn validate_stock_spi_file(stock_spi_path: &Path, profile_code: &str)
             stock_spi_path.display(),
             spi_crc,
             expected_spi_crc
+        ));
+    }
+    if spi_sha256 != expected_spi_sha256 {
+        return Err(format!(
+            "Selected SPI is not a valid {} stock firmware for dualboot patch: {} (SHA256 {}, expected {})",
+            profile_code.to_ascii_uppercase(),
+            stock_spi_path.display(),
+            spi_sha256,
+            expected_spi_sha256
         ));
     }
 
@@ -162,7 +216,9 @@ pub(crate) fn detect_stock_spi_profile(stock_spi_path: &Path) -> Result<&'static
 
     if stock_spi.len() >= 1024 * 1024 {
         let mario_region = &stock_spi[..(1024 * 1024) - 8192];
-        if crc32fast::hash(mario_region) == 0x5f40d6bb {
+        if crc32fast::hash(mario_region) == STOCK_SPI_M_CRC32
+            && sha256_hex(mario_region) == STOCK_SPI_M_REGION_SHA256
+        {
             return Ok("m");
         }
     }
@@ -170,7 +226,9 @@ pub(crate) fn detect_stock_spi_profile(stock_spi_path: &Path) -> Result<&'static
     let zelda_end = 0x3254A0_usize;
     if stock_spi.len() >= zelda_end {
         let zelda_region = &stock_spi[0x20000..zelda_end];
-        if crc32fast::hash(zelda_region) == 0x07a478d4 {
+        if crc32fast::hash(zelda_region) == STOCK_SPI_Z_CRC32
+            && sha256_hex(zelda_region) == STOCK_SPI_Z_REGION_SHA256
+        {
             return Ok("z");
         }
     }

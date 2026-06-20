@@ -2,11 +2,23 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import clsx from "clsx";
 import { getCurrentWindow, listen, safeInvoke } from "./lib/tauri";
 import { MODES, TRANSLATIONS, EMULATORS, EMULATOR_FILE_ACCEPT } from "./lib/appData";
+import {
+  deviceUidErrorText,
+  formatFirmwareLabel,
+  isDeviceReadEmpty,
+  isUnknownValue,
+  isValidDeviceUid,
+  normalizeFirmwareAlias,
+} from "./lib/deviceInfo";
+import {
+  GITHUB_LATEST_RELEASE_API,
+  GITHUB_REPOSITORY_URL,
+  PAYPAL_THANKS_URL,
+  compareVersions,
+  parseSha256Text,
+} from "./lib/update";
 
 const DEFAULT_APP_VERSION = "0.0.0";
-const GITHUB_REPOSITORY_URL = "https://github.com/Serjio193/GWstudio";
-const GITHUB_LATEST_RELEASE_API = "https://api.github.com/repos/Serjio193/GWstudio/releases/latest";
-const PAYPAL_THANKS_URL = "https://www.paypal.com/paypalme/SerhiiTarnopovych";
 
 const NEUTRAL_MODE = {
   name: "Unknown Console",
@@ -128,33 +140,6 @@ function formatMbValue(value) {
     return "0";
   }
   return numeric.toFixed(2).replace(/0$/, "").replace(/\.0$/, "");
-}
-
-function parseVersion(value) {
-  return String(value ?? "")
-    .trim()
-    .replace(/^v/i, "")
-    .split(/[^\d]+/)
-    .filter(Boolean)
-    .map((part) => Number(part));
-}
-
-function compareVersions(a, b) {
-  const left = parseVersion(a);
-  const right = parseVersion(b);
-  const length = Math.max(left.length, right.length, 3);
-  for (let index = 0; index < length; index += 1) {
-    const delta = (left[index] ?? 0) - (right[index] ?? 0);
-    if (delta !== 0) {
-      return delta > 0 ? 1 : -1;
-    }
-  }
-  return 0;
-}
-
-function parseSha256Text(text) {
-  const match = String(text ?? "").match(/\b[a-fA-F0-9]{64}\b/);
-  return match ? match[0].toLowerCase() : "";
 }
 
 function isSupportedImportPath(path) {
@@ -576,57 +561,6 @@ function StartupOverlay({ version, sha256, progress, message }) {
       </div>
     </div>
   );
-}
-
-function isUnknownValue(value) {
-  if (value == null) return true;
-  const normalized = String(value).trim().toUpperCase();
-  return normalized === "" || normalized === "UNKNOWN";
-}
-
-function isDeviceReadEmpty(info = {}) {
-  return [
-    info.programmer,
-    info.device_uid,
-    info.target_voltage,
-    info.detected_firmware,
-    info.external_flash,
-    info.protection,
-    info.filesystem,
-  ].every(isUnknownValue);
-}
-
-function isValidDeviceUid(value) {
-  const uid = String(value ?? "").trim().toUpperCase();
-  return /^[0-9A-F]{24}$/.test(uid) && !/^0+$/.test(uid) && !/^F+$/.test(uid);
-}
-
-function deviceUidErrorText(value) {
-  if (isValidDeviceUid(value)) {
-    return "";
-  }
-  const text = String(value ?? "").trim();
-  if (!text || text.toUpperCase() === "UNKNOWN") {
-    return "Device UID не прочитан. Проверьте подключение ST-LINK и питание консоли, нажмите кнопку включения на консоли и повторите Read Device Info.";
-  }
-  return "Device UID выглядит некорректно. Проверьте подключение ST-LINK, питание консоли и повторите Read Device Info.";
-}
-
-function normalizeFirmwareAlias(value) {
-  const normalized = String(value ?? "").trim().toUpperCase();
-  if (normalized.startsWith("Z")) {
-    return "Z";
-  }
-  if (normalized.startsWith("M")) {
-    return "M";
-  }
-  return null;
-}
-
-function formatFirmwareLabel(value) {
-  const normalized = normalizeFirmwareAlias(value);
-  const fallback = String(value ?? "UNKNOWN").trim() || "UNKNOWN";
-  return normalized ?? fallback;
 }
 
 function ModeButton({ active, mode, onClick, children }) {
