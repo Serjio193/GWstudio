@@ -36,6 +36,44 @@ You must provide your own legally obtained:
 
 The portable release is a single executable. On startup it extracts its bundled tools to a temporary runtime folder next to the exe and removes that runtime after closing.
 
+## Screenshots
+
+### Main Menu
+
+The main screen shows device status, the detected Game & Watch model, and the main workflow buttons: Backup, Build emulator, and Flash device.
+
+![Main Menu](Screenshot/00-main-menu.png)
+
+### Device Status
+
+Read the connected console, ST-LINK programmer, UID, detected firmware, external flash, and protection state.
+
+![Device Status](Screenshot/01-device-status.png)
+
+### Auto Backup
+
+Save Bank1, Bank2, and SPI backups under the detected console UID before flashing.
+
+![Auto Backup](Screenshot/02-auto-backup.png)
+
+### Build Emulator
+
+Import ROMs, download optional menu images, and build the Retro-Go firmware bundle.
+
+![Build Emulator](Screenshot/03-build-emulator.png)
+
+### Flash Device
+
+Flash the prepared Bank1, Bank2, and SPI images with progress indication.
+
+![Flash Device](Screenshot/04-flash-device.png)
+
+### Settings
+
+Change language, update the application, and enable advanced flasher options when needed.
+
+![Settings](Screenshot/05-settings.png)
+
 ## Download And Verify
 
 Download the latest `GWStudio.exe` from GitHub Releases:

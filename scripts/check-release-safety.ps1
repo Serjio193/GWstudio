@@ -108,6 +108,9 @@ foreach ($file in Get-GitFiles) {
   if ($lower.StartsWith("gw-studio-tauri/public/") -and $extension -in @(".png", ".jpg", ".jpeg", ".webp", ".svg", ".ico")) {
     continue
   }
+  if ($lower.StartsWith("screenshot/") -and $extension -in @(".png", ".jpg", ".jpeg", ".webp")) {
+    continue
+  }
   if ($lower.StartsWith("game-and-watch-retro-go-sylverb/") -and $extension -in @(".c", ".h", ".cpp", ".hpp", ".s", ".ld", ".mk", ".txt", ".md", ".sh", ".py", ".json", ".yml", ".yaml", ".toml", ".cmake", "")) {
     continue
   }
