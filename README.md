@@ -144,8 +144,27 @@ You can also run the same check from Settings with `Update program`.
 
 ## Links
 
-- GitHub Repository: https://github.com/Serjio193/GWstudio
-- Say Thanks: https://www.paypal.com/paypalme/SerhiiTarnopovych
+- Repository: https://github.com/Serjio193/GWstudio
+
+## Support
+
+<a href="https://paypal.me/SerhiiTarnopovych" target="_blank">
+  <img src="assets/support/paypal-logo.png" alt="PayPal" height="34">
+</a>
+&nbsp;&nbsp;
+<a href="#usdt-trc20">
+  <img src="assets/support/usdt-trc20-logo.png" alt="USDT TRC20" height="34">
+</a>
+
+<details id="usdt-trc20">
+<summary>Show USDT (TRC20) wallet</summary>
+
+`TB4kzsHL3emLtdvDroNE9dEpMhUW6r3bTL`
+
+<br>
+<img src="assets/support/usdt-trc20-qr.jpg" alt="USDT TRC20 QR" width="280">
+
+</details>
 
 ## Third-Party Components
 
