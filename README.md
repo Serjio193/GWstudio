@@ -38,26 +38,29 @@ The portable release is a single executable. On startup it extracts its bundled 
 
 ## Download And Verify
 
-Download the latest `GW.Studio.exe` from GitHub Releases:
+Download the latest `gw_studio_tauri.exe` from GitHub Releases:
 
 ```text
 https://github.com/Serjio193/GWstudio/releases/latest
 ```
 
-Each release also provides `GW.Studio.exe.sha256`.
+Each release also provides:
+
+- `gw_studio_tauri.exe.sha256`
+- `gw_studio_tauri.exe.sig`
 
 PowerShell verification:
 
 ```powershell
-Get-FileHash -Algorithm SHA256 .\GW.Studio.exe
+Get-FileHash -Algorithm SHA256 .\gw_studio_tauri.exe
 ```
 
-The printed hash must match the first value inside `GW.Studio.exe.sha256`.
+The printed hash must match the first value inside `gw_studio_tauri.exe.sha256`.
 
 Example `.sha256` format:
 
 ```text
-87664067AB929B6C55B53886B9D0D71887A27BFD09C1A2A85FF8DF8A64FA2B9D  GW.Studio.exe
+87664067AB929B6C55B53886B9D0D71887A27BFD09C1A2A85FF8DF8A64FA2B9D  gw_studio_tauri.exe
 ```
 
 ## Windows SmartScreen
@@ -67,8 +70,8 @@ GW Studio is currently not code-signed. Windows may show a warning such as "unkn
 This warning appears because the executable is unsigned and new, not because the SHA256 check failed. To reduce risk:
 
 - Download only from the official GitHub Releases page.
-- Verify `GW.Studio.exe` with the matching `.sha256` file.
-- Keep the exe in a Latin-only folder path, for example `C:\GWStudio\GW.Studio.exe`.
+- Verify `gw_studio_tauri.exe` with the matching `.sha256` file.
+- Keep the exe in a Latin-only folder path, for example `C:\GWStudio\gw_studio_tauri.exe`.
 
 ## Basic Workflow
 
@@ -91,10 +94,13 @@ GW Studio checks the latest GitHub Release after startup. If a newer version is 
 The update process:
 
 1. Downloads the new exe from GitHub Releases.
-2. Verifies SHA256 when a `.sha256` release asset is available.
-3. Closes the current application.
-4. Replaces the old exe.
-5. Starts the new version.
+2. Requires the official `gw_studio_tauri.exe`, `gw_studio_tauri.exe.sha256`, and `gw_studio_tauri.exe.sig` release assets.
+3. Verifies SHA256 before installing.
+4. Verifies the Ed25519/OpenSSH signature with the public key built into the app.
+5. Closes the current application.
+6. Saves `gw_studio_tauri.exe.rollback` next to the current exe.
+7. Replaces the old exe.
+8. Starts the new version.
 
 You can also run the same check from Settings with `Update program`.
 

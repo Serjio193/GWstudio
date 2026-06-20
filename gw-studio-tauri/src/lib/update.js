@@ -1,6 +1,9 @@
 export const GITHUB_REPOSITORY_URL = "https://github.com/Serjio193/GWstudio";
 export const GITHUB_LATEST_RELEASE_API = "https://api.github.com/repos/Serjio193/GWstudio/releases/latest";
 export const PAYPAL_THANKS_URL = "https://www.paypal.com/paypalme/SerhiiTarnopovych";
+export const RELEASE_EXE_ASSET_NAME = "gw_studio_tauri.exe";
+export const RELEASE_SHA256_ASSET_NAME = `${RELEASE_EXE_ASSET_NAME}.sha256`;
+export const RELEASE_SIGNATURE_ASSET_NAME = `${RELEASE_EXE_ASSET_NAME}.sig`;
 
 function parseVersion(value) {
   return String(value ?? "")

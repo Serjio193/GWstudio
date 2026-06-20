@@ -14,6 +14,9 @@ import {
   GITHUB_LATEST_RELEASE_API,
   GITHUB_REPOSITORY_URL,
   PAYPAL_THANKS_URL,
+  RELEASE_EXE_ASSET_NAME,
+  RELEASE_SHA256_ASSET_NAME,
+  RELEASE_SIGNATURE_ASSET_NAME,
   compareVersions,
   parseSha256Text,
 } from "./lib/update";
@@ -2709,21 +2712,18 @@ export default function App() {
       const release = await response.json();
       const latestVersion = String(release.tag_name || release.name || "").replace(/^v/i, "");
       const assets = Array.isArray(release.assets) ? release.assets : [];
-      const exeAsset = assets.find((asset) => String(asset.name ?? "").toLowerCase() === "gw studio.exe")
-        ?? assets.find((asset) => String(asset.name ?? "").toLowerCase().endsWith(".exe"));
-      const shaAsset = assets.find((asset) => String(asset.name ?? "").toLowerCase().endsWith(".sha256"));
-      const sigAsset = assets.find((asset) => String(asset.name ?? "").toLowerCase() === `${String(exeAsset?.name ?? "").toLowerCase()}.sig`)
-        ?? assets.find((asset) => String(asset.name ?? "").toLowerCase().endsWith(".exe.sig"))
-        ?? assets.find((asset) => String(asset.name ?? "").toLowerCase().endsWith(".sig"));
+      const exeAsset = assets.find((asset) => String(asset.name ?? "").toLowerCase() === RELEASE_EXE_ASSET_NAME);
+      const shaAsset = assets.find((asset) => String(asset.name ?? "").toLowerCase() === RELEASE_SHA256_ASSET_NAME);
+      const sigAsset = assets.find((asset) => String(asset.name ?? "").toLowerCase() === RELEASE_SIGNATURE_ASSET_NAME);
 
       if (!latestVersion || !exeAsset?.browser_download_url) {
-        throw new Error("latest release does not contain GW Studio exe asset");
+        throw new Error(`latest release does not contain ${RELEASE_EXE_ASSET_NAME}`);
       }
       if (!sigAsset?.browser_download_url) {
-        throw new Error("latest release does not contain GW Studio signature asset");
+        throw new Error(`latest release does not contain ${RELEASE_SIGNATURE_ASSET_NAME}`);
       }
       if (!shaAsset?.browser_download_url) {
-        throw new Error("latest release does not contain GW Studio SHA256 asset");
+        throw new Error(`latest release does not contain ${RELEASE_SHA256_ASSET_NAME}`);
       }
 
       let expectedSha = "";

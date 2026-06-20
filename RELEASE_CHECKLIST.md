@@ -61,6 +61,7 @@ Upload exactly these runtime artifacts:
 - [ ] `gw_studio_tauri.exe`
 - [ ] `gw_studio_tauri.exe.sha256`
 - [ ] `gw_studio_tauri.exe.sig`
+- [ ] Confirm these exact asset names are used. The updater rejects fallback `.exe` / `.sig` names.
 
 Do not upload:
 
@@ -83,4 +84,5 @@ Do not upload:
 - [ ] Build firmware with a small safe ROM set.
 - [ ] Confirm Auto Flash is disabled before build and enabled after a current build.
 - [ ] Confirm update check does not install without `.sha256` and `.sig`.
+- [ ] Confirm updater leaves `gw_studio_tauri.exe.rollback` after a successful update.
 - [ ] Confirm `README.md`, `THIRD_PARTY_NOTICES.md`, and `RELEASE_AUDIT.md` match the release contents.

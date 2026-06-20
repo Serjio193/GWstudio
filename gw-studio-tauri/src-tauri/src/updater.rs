@@ -43,6 +43,8 @@ pub(crate) struct AppUpdateInstallRequest {
 
 const RELEASE_SIGNATURE_NAMESPACE: &str = "gwstudio-release";
 const RELEASE_PUBLIC_KEY_B64: &str = "AAAAC3NzaC1lZDI1NTE5AAAAIOhA2J9ebY5gZfLfMJ+0uFEBL/QFWab74GLqEG6nOq3u";
+const RELEASE_EXE_ASSET_NAME: &str = "gw_studio_tauri.exe";
+const RELEASE_SIGNATURE_ASSET_NAME: &str = "gw_studio_tauri.exe.sig";
 
 fn hide_command_window(command: &mut Command) -> &mut Command {
     #[cfg(target_os = "windows")]
@@ -136,6 +138,23 @@ fn allowed_external_url(url: &str) -> bool {
 
 fn allowed_update_download_url(url: &str) -> bool {
     url.starts_with("https://github.com/Serjio193/GWstudio/releases/download/")
+}
+
+fn update_url_file_name(url: &str) -> &str {
+    url.split('?')
+        .next()
+        .unwrap_or(url)
+        .rsplit('/')
+        .next()
+        .unwrap_or_default()
+}
+
+fn allowed_update_exe_url(url: &str) -> bool {
+    allowed_update_download_url(url) && update_url_file_name(url).eq_ignore_ascii_case(RELEASE_EXE_ASSET_NAME)
+}
+
+fn allowed_update_signature_url(url: &str) -> bool {
+    allowed_update_download_url(url) && update_url_file_name(url).eq_ignore_ascii_case(RELEASE_SIGNATURE_ASSET_NAME)
 }
 
 fn read_ssh_u32(bytes: &[u8], offset: &mut usize) -> Result<u32, String> {
@@ -338,6 +357,14 @@ fn run_update_helper(args: &[std::ffi::OsString]) -> Result<(), String> {
     wait_for_process_exit(parent_pid);
     thread::sleep(Duration::from_millis(500));
 
+    let rollback_exe = target_exe.with_extension("exe.rollback");
+    fs::copy(&target_exe, &rollback_exe).map_err(|error| {
+        format!(
+            "failed to create update rollback copy {}: {error}",
+            rollback_exe.display()
+        )
+    })?;
+
     let mut last_error = None;
     for _ in 0..40 {
         match move_file_replace(&update_exe, &target_exe) {
@@ -363,7 +390,10 @@ fn run_update_helper(args: &[std::ffi::OsString]) -> Result<(), String> {
         .stderr(Stdio::null());
     hide_command_window(&mut command)
         .spawn()
-        .map_err(|error| format!("failed to restart updated app: {error}"))?;
+        .map_err(|error| {
+            let _ = move_file_replace(&rollback_exe, &target_exe);
+            format!("failed to restart updated app; rollback restored if possible: {error}")
+        })?;
 
     let _ = fs::remove_file(update_exe);
     let _ = fs::remove_dir_all(update_dir);
@@ -423,14 +453,14 @@ pub(crate) async fn install_app_update(
 ) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || {
         let download_url = request.download_url.trim();
-        if !allowed_update_download_url(download_url) {
+        if !allowed_update_exe_url(download_url) {
             return Err("update download URL is not allowed".to_string());
         }
         let signature_url = request.signature_url.trim();
         if signature_url.is_empty() {
             return Err("update signature URL is required".to_string());
         }
-        if !allowed_update_download_url(signature_url) {
+        if !allowed_update_signature_url(signature_url) {
             return Err("update signature URL is not allowed".to_string());
         }
 
