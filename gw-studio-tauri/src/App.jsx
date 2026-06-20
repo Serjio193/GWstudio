@@ -2730,6 +2730,7 @@ export default function App() {
         request: {
           download_url: info.downloadUrl,
           expected_sha256: info.sha256 || null,
+          signature_url: info.signatureUrl || "",
           version: info.version,
         },
       });
@@ -2777,26 +2778,37 @@ export default function App() {
       const exeAsset = assets.find((asset) => String(asset.name ?? "").toLowerCase() === "gw studio.exe")
         ?? assets.find((asset) => String(asset.name ?? "").toLowerCase().endsWith(".exe"));
       const shaAsset = assets.find((asset) => String(asset.name ?? "").toLowerCase().endsWith(".sha256"));
+      const sigAsset = assets.find((asset) => String(asset.name ?? "").toLowerCase() === `${String(exeAsset?.name ?? "").toLowerCase()}.sig`)
+        ?? assets.find((asset) => String(asset.name ?? "").toLowerCase().endsWith(".exe.sig"))
+        ?? assets.find((asset) => String(asset.name ?? "").toLowerCase().endsWith(".sig"));
 
       if (!latestVersion || !exeAsset?.browser_download_url) {
         throw new Error("latest release does not contain GW Studio exe asset");
       }
+      if (!sigAsset?.browser_download_url) {
+        throw new Error("latest release does not contain GW Studio signature asset");
+      }
+      if (!shaAsset?.browser_download_url) {
+        throw new Error("latest release does not contain GW Studio SHA256 asset");
+      }
 
       let expectedSha = "";
-      if (shaAsset?.browser_download_url) {
-        try {
-          const shaResponse = await fetch(shaAsset.browser_download_url);
-          if (shaResponse.ok) {
-            expectedSha = parseSha256Text(await shaResponse.text());
-          }
-        } catch {
-          expectedSha = "";
+      try {
+        const shaResponse = await fetch(shaAsset.browser_download_url);
+        if (shaResponse.ok) {
+          expectedSha = parseSha256Text(await shaResponse.text());
         }
+      } catch {
+        expectedSha = "";
+      }
+      if (!/^[a-f0-9]{64}$/i.test(expectedSha)) {
+        throw new Error("latest release SHA256 asset is invalid");
       }
 
       const latestInfo = {
         version: latestVersion,
         downloadUrl: exeAsset.browser_download_url,
+        signatureUrl: sigAsset.browser_download_url,
         sha256: expectedSha,
         releaseUrl: release.html_url || GITHUB_REPOSITORY_URL,
       };
@@ -5010,7 +5022,11 @@ export default function App() {
         }
         setActiveFlashPhase(kind);
         setFlashProgress(Math.max(12, Math.round((index / Math.max(1, flashPlan.length)) * 85) + 10));
-        await writeFirmwarePhase(kind, path, { ...(kind === "spi" ? { externalFlashOffsetBytes: 0 } : {}), preserveOperation: true });
+        await writeFirmwarePhase(kind, path, {
+          ...(kind === "spi" ? { externalFlashOffsetBytes: 0 } : {}),
+          manifestRequired: true,
+          preserveOperation: true,
+        });
       }
       setFlashProgress(100);
       setFlashPhaseLabel(t.autoFlashDone);
@@ -5079,6 +5095,7 @@ export default function App() {
       path,
       externalFlashMb: detectedExternalFlashValue || 64,
       externalFlashOffsetBytes: options.externalFlashOffsetBytes ?? firmwareBaseBytes,
+      manifestRequired: Boolean(options.manifestRequired),
     });
     setLogs((items) => [
       ...items,

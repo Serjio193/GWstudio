@@ -9,12 +9,12 @@ Tracked public files:
 
 Local private file, never commit:
 
-- `secrets/gwstudio_release_ed25519`
+- `secrets/gwstudio_release_ed25519_v2`
 
 Sign the release executable:
 
 ```powershell
-ssh-keygen -Y sign -f .\secrets\gwstudio_release_ed25519 -n gwstudio-release .\gw-studio-tauri\src-tauri\target\release\gw_studio_tauri.exe
+ssh-keygen -Y sign -f .\secrets\gwstudio_release_ed25519_v2 -n gwstudio-release .\gw-studio-tauri\src-tauri\target\release\gw_studio_tauri.exe
 ```
 
 This creates:

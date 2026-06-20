@@ -249,8 +249,19 @@ fn artifact_path_matches(source: &Path, artifact: &FirmwareArtifact) -> bool {
             .unwrap_or(false)
 }
 
-fn validate_bundle_manifest_artifact(source: &Path, target: &str, size: u64) -> Result<(), String> {
+fn validate_bundle_manifest_artifact(
+    source: &Path,
+    target: &str,
+    size: u64,
+    manifest_required: bool,
+) -> Result<(), String> {
     let Some(manifest_path) = bundle_manifest_path_for_firmware(source) else {
+        if manifest_required {
+            return Err(format!(
+                "bundle manifest is required for auto-flash firmware: {}",
+                source.display()
+            ));
+        }
         return Ok(());
     };
     let manifest_text = fs::read_to_string(&manifest_path)
@@ -346,6 +357,7 @@ fn run_single_flash_phase(
     target: &str,
     external_flash_mb: f64,
     external_flash_offset_bytes: u64,
+    manifest_required: bool,
 ) -> Result<FirmwareWriteResult, String> {
     let is_locked = protection.trim().eq_ignore_ascii_case("LOCKED");
     if is_locked {
@@ -360,7 +372,7 @@ fn run_single_flash_phase(
         return Err(format!("firmware path is not a file: {}", source.display()));
     }
     let source_size = validate_firmware_source(&source, target, external_flash_mb, external_flash_offset_bytes)?;
-    validate_bundle_manifest_artifact(&source, target, source_size)?;
+    validate_bundle_manifest_artifact(&source, target, source_size, manifest_required)?;
 
     if target == "ext" {
         let full_flash_bytes = (external_flash_mb * 1024.0 * 1024.0).round() as u64;
@@ -459,9 +471,10 @@ pub(crate) async fn write_bank1_firmware(
     frequency: u32,
     protection: String,
     path: String,
+    manifest_required: bool,
 ) -> Result<FirmwareWriteResult, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        run_single_flash_phase(&app, backend, frequency, protection, path, "bank1", 0.0, 0)
+        run_single_flash_phase(&app, backend, frequency, protection, path, "bank1", 0.0, 0, manifest_required)
     })
     .await
     .map_err(|error| format!("failed to join bank1 flash task: {error}"))?
@@ -474,9 +487,10 @@ pub(crate) async fn write_bank2_firmware(
     frequency: u32,
     protection: String,
     path: String,
+    manifest_required: bool,
 ) -> Result<FirmwareWriteResult, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        run_single_flash_phase(&app, backend, frequency, protection, path, "bank2", 0.0, 0)
+        run_single_flash_phase(&app, backend, frequency, protection, path, "bank2", 0.0, 0, manifest_required)
     })
     .await
     .map_err(|error| format!("failed to join bank2 flash task: {error}"))?
@@ -491,9 +505,10 @@ pub(crate) async fn write_spi_firmware(
     path: String,
     external_flash_mb: f64,
     external_flash_offset_bytes: u64,
+    manifest_required: bool,
 ) -> Result<FirmwareWriteResult, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        run_single_flash_phase(&app, backend, frequency, protection, path, "ext", external_flash_mb, external_flash_offset_bytes)
+        run_single_flash_phase(&app, backend, frequency, protection, path, "ext", external_flash_mb, external_flash_offset_bytes, manifest_required)
     })
     .await
     .map_err(|error| format!("failed to join SPI flash task: {error}"))?

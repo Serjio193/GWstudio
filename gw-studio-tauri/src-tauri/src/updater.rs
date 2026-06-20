@@ -1,6 +1,8 @@
 use crate::paths::host_root;
+use base64::Engine;
+use ed25519_dalek::{Signature, Verifier, VerifyingKey};
 use serde::Deserialize;
-use sha2::{Digest, Sha256};
+use sha2::{Digest, Sha256, Sha512};
 use std::fs;
 #[cfg(target_os = "windows")]
 use std::os::windows::ffi::OsStrExt;
@@ -35,8 +37,12 @@ pub(crate) struct OpenExternalUrlRequest {
 pub(crate) struct AppUpdateInstallRequest {
     download_url: String,
     expected_sha256: Option<String>,
+    signature_url: String,
     version: String,
 }
+
+const RELEASE_SIGNATURE_NAMESPACE: &str = "gwstudio-release";
+const RELEASE_PUBLIC_KEY_B64: &str = "AAAAC3NzaC1lZDI1NTE5AAAAIOhA2J9ebY5gZfLfMJ+0uFEBL/QFWab74GLqEG6nOq3u";
 
 fn hide_command_window(command: &mut Command) -> &mut Command {
     #[cfg(target_os = "windows")]
@@ -130,6 +136,149 @@ fn allowed_external_url(url: &str) -> bool {
 
 fn allowed_update_download_url(url: &str) -> bool {
     url.starts_with("https://github.com/Serjio193/GWstudio/releases/download/")
+}
+
+fn read_ssh_u32(bytes: &[u8], offset: &mut usize) -> Result<u32, String> {
+    let end = offset
+        .checked_add(4)
+        .ok_or_else(|| "SSH signature offset overflow".to_string())?;
+    let slice = bytes
+        .get(*offset..end)
+        .ok_or_else(|| "truncated SSH signature field length".to_string())?;
+    *offset = end;
+    Ok(u32::from_be_bytes([slice[0], slice[1], slice[2], slice[3]]))
+}
+
+fn read_ssh_string<'a>(bytes: &'a [u8], offset: &mut usize) -> Result<&'a [u8], String> {
+    let len = read_ssh_u32(bytes, offset)? as usize;
+    let end = offset
+        .checked_add(len)
+        .ok_or_else(|| "SSH signature field offset overflow".to_string())?;
+    let slice = bytes
+        .get(*offset..end)
+        .ok_or_else(|| "truncated SSH signature field".to_string())?;
+    *offset = end;
+    Ok(slice)
+}
+
+fn push_ssh_string(output: &mut Vec<u8>, value: &[u8]) -> Result<(), String> {
+    let len = u32::try_from(value.len())
+        .map_err(|_| "SSH signature field is too large".to_string())?;
+    output.extend_from_slice(&len.to_be_bytes());
+    output.extend_from_slice(value);
+    Ok(())
+}
+
+fn decode_release_public_key() -> Result<[u8; 32], String> {
+    let public_blob = base64::engine::general_purpose::STANDARD
+        .decode(RELEASE_PUBLIC_KEY_B64)
+        .map_err(|error| format!("failed to decode release public key: {error}"))?;
+    let mut offset = 0;
+    let key_type = read_ssh_string(&public_blob, &mut offset)?;
+    if key_type != b"ssh-ed25519" {
+        return Err("release public key is not ssh-ed25519".to_string());
+    }
+    let key = read_ssh_string(&public_blob, &mut offset)?;
+    if offset != public_blob.len() {
+        return Err("release public key has trailing data".to_string());
+    }
+    key.try_into()
+        .map_err(|_| "release public key has invalid Ed25519 length".to_string())
+}
+
+fn decode_armored_ssh_signature(text: &str) -> Result<Vec<u8>, String> {
+    let mut inside = false;
+    let mut encoded = String::new();
+    for line in text.lines() {
+        let trimmed = line.trim();
+        if trimmed == "-----BEGIN SSH SIGNATURE-----" {
+            inside = true;
+            continue;
+        }
+        if trimmed == "-----END SSH SIGNATURE-----" {
+            break;
+        }
+        if inside {
+            encoded.push_str(trimmed);
+        }
+    }
+    if encoded.is_empty() {
+        return Err("update signature is missing SSH signature armor".to_string());
+    }
+    base64::engine::general_purpose::STANDARD
+        .decode(encoded)
+        .map_err(|error| format!("failed to decode update signature: {error}"))
+}
+
+fn verify_update_signature(update_exe: &Path, signature_path: &Path) -> Result<(), String> {
+    let signature_text = fs::read_to_string(signature_path)
+        .map_err(|error| format!("failed to read update signature {}: {error}", signature_path.display()))?;
+    let signature_blob = decode_armored_ssh_signature(&signature_text)?;
+    let mut offset = 0;
+    if signature_blob.get(0..6) != Some(b"SSHSIG") {
+        return Err("update signature is not an OpenSSH SSHSIG blob".to_string());
+    }
+    offset += 6;
+    let version = read_ssh_u32(&signature_blob, &mut offset)?;
+    if version != 1 {
+        return Err(format!("unsupported SSH signature version: {version}"));
+    }
+    let public_key_blob = read_ssh_string(&signature_blob, &mut offset)?;
+    let namespace = read_ssh_string(&signature_blob, &mut offset)?;
+    let reserved = read_ssh_string(&signature_blob, &mut offset)?;
+    let hash_algorithm = read_ssh_string(&signature_blob, &mut offset)?;
+    let signature_wrapper = read_ssh_string(&signature_blob, &mut offset)?;
+    if offset != signature_blob.len() {
+        return Err("update signature has trailing data".to_string());
+    }
+    if namespace != RELEASE_SIGNATURE_NAMESPACE.as_bytes() {
+        return Err("update signature namespace is invalid".to_string());
+    }
+    if !reserved.is_empty() {
+        return Err("update signature reserved field is not empty".to_string());
+    }
+    if hash_algorithm != b"sha512" {
+        return Err("update signature must use sha512".to_string());
+    }
+
+    let release_public_key = decode_release_public_key()?;
+    if public_key_blob != base64::engine::general_purpose::STANDARD
+        .decode(RELEASE_PUBLIC_KEY_B64)
+        .map_err(|error| format!("failed to decode release public key: {error}"))?
+        .as_slice()
+    {
+        return Err("update signature was made with an unknown release key".to_string());
+    }
+
+    let mut signature_offset = 0;
+    let signature_type = read_ssh_string(signature_wrapper, &mut signature_offset)?;
+    let signature_bytes = read_ssh_string(signature_wrapper, &mut signature_offset)?;
+    if signature_offset != signature_wrapper.len() {
+        return Err("update signature wrapper has trailing data".to_string());
+    }
+    if signature_type != b"ssh-ed25519" {
+        return Err("update signature algorithm is not ssh-ed25519".to_string());
+    }
+    let signature_array: [u8; 64] = signature_bytes
+        .try_into()
+        .map_err(|_| "update signature has invalid Ed25519 length".to_string())?;
+    let signature = Signature::from_bytes(&signature_array);
+
+    let update_bytes = fs::read(update_exe)
+        .map_err(|error| format!("failed to read downloaded update for signature check: {error}"))?;
+    let update_hash = Sha512::digest(&update_bytes);
+    let mut signed_data = Vec::new();
+    push_ssh_string(&mut signed_data, b"SSHSIG")?;
+    push_ssh_string(&mut signed_data, RELEASE_SIGNATURE_NAMESPACE.as_bytes())?;
+    push_ssh_string(&mut signed_data, b"")?;
+    push_ssh_string(&mut signed_data, b"sha512")?;
+    push_ssh_string(&mut signed_data, &update_hash)?;
+
+    let verifying_key = VerifyingKey::from_bytes(&release_public_key)
+        .map_err(|error| format!("failed to load release public key: {error}"))?;
+    verifying_key
+        .verify(&signed_data, &signature)
+        .map_err(|error| format!("update signature verification failed: {error}"))
 }
 
 pub(crate) fn cleanup_stale_update_dir() {
@@ -277,6 +426,13 @@ pub(crate) async fn install_app_update(
         if !allowed_update_download_url(download_url) {
             return Err("update download URL is not allowed".to_string());
         }
+        let signature_url = request.signature_url.trim();
+        if signature_url.is_empty() {
+            return Err("update signature URL is required".to_string());
+        }
+        if !allowed_update_download_url(signature_url) {
+            return Err("update signature URL is not allowed".to_string());
+        }
 
         let exe_path = std::env::current_exe()
             .map_err(|error| format!("failed to resolve current exe path: {error}"))?;
@@ -295,26 +451,33 @@ pub(crate) async fn install_app_update(
             .filter(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '.' | '-' | '_'))
             .collect::<String>();
         let update_exe = update_dir.join(format!("GW Studio-{version_safe}.update.exe"));
+        let update_sig = update_dir.join(format!("GW Studio-{version_safe}.update.exe.sig"));
         download_file(download_url, &update_exe)?;
+        download_file(signature_url, &update_sig)?;
         let metadata = fs::metadata(&update_exe)
             .map_err(|error| format!("failed to stat downloaded update: {error}"))?;
         if metadata.len() < 10 * 1024 * 1024 {
             return Err(format!("downloaded update is unexpectedly small: {} bytes", metadata.len()));
         }
 
-        if let Some(expected_hash) = request.expected_sha256.as_deref() {
-            let normalized_expected = expected_hash.trim().to_ascii_lowercase();
-            if normalized_expected.len() == 64 && normalized_expected.chars().all(|ch| ch.is_ascii_hexdigit()) {
-                let bytes = fs::read(&update_exe)
-                    .map_err(|error| format!("failed to read downloaded update: {error}"))?;
-                let actual_hash = format!("{:x}", Sha256::digest(&bytes));
-                if actual_hash != normalized_expected {
-                    return Err(format!(
-                        "update SHA256 mismatch: expected {normalized_expected}, got {actual_hash}"
-                    ));
-                }
-            }
+        let normalized_expected = request
+            .expected_sha256
+            .as_deref()
+            .unwrap_or_default()
+            .trim()
+            .to_ascii_lowercase();
+        if normalized_expected.len() != 64 || !normalized_expected.chars().all(|ch| ch.is_ascii_hexdigit()) {
+            return Err("valid update SHA256 is required".to_string());
         }
+        let bytes = fs::read(&update_exe)
+            .map_err(|error| format!("failed to read downloaded update: {error}"))?;
+        let actual_hash = format!("{:x}", Sha256::digest(&bytes));
+        if actual_hash != normalized_expected {
+            return Err(format!(
+                "update SHA256 mismatch: expected {normalized_expected}, got {actual_hash}"
+            ));
+        }
+        verify_update_signature(&update_exe, &update_sig)?;
 
         let helper_exe = update_dir.join("GWStudioUpdateHelper.exe");
         fs::copy(&exe_path, &helper_exe)
