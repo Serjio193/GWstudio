@@ -1,7 +1,7 @@
 {
   "name": "gw-studio-tauri",
   "private": true,
-  "version": "1.0.12",
+  "version": "1.0.13",
   "license": "Unlicense",
   "type": "module",
   "scripts": {
