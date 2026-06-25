@@ -31,6 +31,7 @@ pub(crate) struct BuildBundleEntry {
 #[derive(Deserialize)]
 pub(crate) struct BuildBundleRequest {
     firmware_profile: String,
+    dual_boot: Option<bool>,
     installed_spi_mb: f64,
     firmware_reserved_mb: f64,
     stock_bank1_path: Option<String>,
@@ -42,6 +43,7 @@ pub(crate) struct BuildBundleRequest {
 #[derive(Serialize)]
 pub(crate) struct BuildBundleResult {
     bundle_dir: String,
+    dual_boot: bool,
     summary_path: String,
     manifest_path: String,
     retro_go_workspace_dir: String,
@@ -81,6 +83,7 @@ fn build_firmware_bundle_blocking(
     emit_build_progress(app, 2.0, "Preparing build workspace");
 
     let coverflow_enabled = request.coverflow_enabled.unwrap_or(false);
+    let dual_boot = request.dual_boot.unwrap_or(true);
     let firmware_profile = firmware_profile_code(&request.firmware_profile).to_string();
     let bundle_name = format!("bundle_{}_{}", firmware_profile, bundle_stamp());
     let bundle_dir = bundles_dir().join(&bundle_name);
@@ -185,8 +188,16 @@ fn build_firmware_bundle_blocking(
     let summary_path = bundle_dir.join("summary.txt");
     let manifest_path = bundle_dir.join("bundle_manifest.json");
     let flash_notes_path = bundle_dir.join("flash_bundle.txt");
-    let stock_bank1_candidate = explicit_stock_file(request.stock_bank1_path.as_deref())?;
-    let stock_spi_candidate = explicit_stock_file(request.stock_spi_path.as_deref())?;
+    let stock_bank1_candidate = if dual_boot {
+        Some(explicit_stock_file(request.stock_bank1_path.as_deref())?)
+    } else {
+        None
+    };
+    let stock_spi_candidate = if dual_boot {
+        Some(explicit_stock_file(request.stock_spi_path.as_deref())?)
+    } else {
+        None
+    };
     let extflash_build_path = retro_go_workspace_dir
         .join("build")
         .join("gw_retro_go_extflash.bin");
@@ -195,24 +206,37 @@ fn build_firmware_bundle_blocking(
         .join("gw_retro_go_intflash.bin");
     let build_log_path = retro_go_workspace_dir.join("build_gw_studio.log");
     let patch_workspace_dir = build_workspaces_dir().join(format!("game_watch_patch_{}", bundle_name));
-    let extflash_offset_bytes = firmware_reserved_bytes;
-    let extflash_size_mb = (request.installed_spi_mb - request.firmware_reserved_mb)
+    let extflash_offset_bytes = if dual_boot { firmware_reserved_bytes } else { 0 };
+    let reserved_spi_mb = if dual_boot {
+        request.firmware_reserved_mb
+    } else {
+        0.0
+    };
+    let extflash_size_mb = (request.installed_spi_mb - reserved_spi_mb)
         .max(1.0)
         .round() as u32;
-    let patched_bank1_candidate = run_game_watch_patch_build(
-        app,
-        &patch_workspace_dir,
-        &stock_bank1_candidate,
-        &stock_spi_candidate,
-        &firmware_profile,
-    )?;
+    let patched_bank1_candidate = if dual_boot {
+        Some(run_game_watch_patch_build(
+            app,
+            &patch_workspace_dir,
+            stock_bank1_candidate
+                .as_deref()
+                .ok_or_else(|| "stock Bank1 path is missing".to_string())?,
+            stock_spi_candidate
+                .as_deref()
+                .ok_or_else(|| "stock SPI path is missing".to_string())?,
+            &firmware_profile,
+        )?)
+    } else {
+        None
+    };
     emit_build_progress(app, 64.0, "Workspace ready, starting Retro-Go fork build");
     let _actual_build_log_path = run_retro_go_build(
         app,
         &retro_go_workspace_dir,
         extflash_size_mb,
         extflash_offset_bytes,
-        2,
+        if dual_boot { 2 } else { 1 },
         &firmware_profile,
         coverflow_enabled,
     )?;
@@ -230,36 +254,53 @@ fn build_firmware_bundle_blocking(
     let bank1_output_path = firmware_outputs_dir.join("bank1d.bin");
     let bank2_output_path = firmware_outputs_dir.join(firmware_output_name("bank2", &firmware_profile));
     let spi_output_path = firmware_outputs_dir.join(firmware_output_name("spi", &firmware_profile));
-    let bank1_output = if copy_if_exists(&patched_bank1_candidate, &bank1_output_path)? {
-        Some(bank1_output_path.clone())
+    let bank1_source = if dual_boot {
+        patched_bank1_candidate.as_ref()
+    } else {
+        Some(&intflash_build_path)
+    };
+    let bank1_output = if let Some(source) = bank1_source {
+        if copy_if_exists(source, &bank1_output_path)? {
+            Some(bank1_output_path.clone())
+        } else {
+            None
+        }
     } else {
         None
     };
-    let bank2_output = if copy_if_exists(&intflash_build_path, &bank2_output_path)? {
+    let bank2_output = if dual_boot && copy_if_exists(&intflash_build_path, &bank2_output_path)? {
         Some(bank2_output_path.clone())
     } else {
         None
     };
     let patched_spi_candidate = patch_workspace_dir.join("build").join("external_flash_patched.bin");
     let patched_spi_size = fs::metadata(&patched_spi_candidate).map(|metadata| metadata.len()).unwrap_or(0);
-    let spi_prefix_source = if patched_spi_size >= extflash_offset_bytes {
-        patched_spi_candidate.clone()
+    let spi_prefix_source = if !dual_boot {
+        None
+    } else if patched_spi_size >= extflash_offset_bytes {
+        Some(patched_spi_candidate.clone())
     } else {
         stock_spi_candidate.clone()
     };
-    compose_spi_image(&spi_prefix_source, &extflash_build_path, &spi_output_path, extflash_offset_bytes)?;
+    if let Some(prefix_source) = spi_prefix_source.as_deref() {
+        compose_spi_image(prefix_source, &extflash_build_path, &spi_output_path, extflash_offset_bytes)?;
+    } else {
+        fs::copy(&extflash_build_path, &spi_output_path)
+            .map_err(|error| format!("failed to copy standalone SPI image: {error}"))?;
+    }
     let spi_output = spi_output_path.clone();
     let spi_output_size_bytes = fs::metadata(&spi_output).map(|metadata| metadata.len()).unwrap_or(0);
 
     let mut summary_lines = vec![
         format!("Bundle: {bundle_name}"),
         format!("Firmware profile: {}", request.firmware_profile),
+        format!("Dual boot: {}", dual_boot),
         format!("Firmware code: {}", firmware_profile.to_ascii_uppercase()),
         format!("Installed SPI MB: {}", request.installed_spi_mb),
         format!("Firmware reserved MB: {}", request.firmware_reserved_mb),
         format!("Retro-Go fork EXTFLASH_SIZE_MB: {}", extflash_size_mb),
         format!("Retro-Go fork EXTFLASH_OFFSET: {}", extflash_offset_bytes),
-        "Retro-Go fork INTFLASH_BANK: 2".to_string(),
+        format!("Retro-Go fork INTFLASH_BANK: {}", if dual_boot { 2 } else { 1 }),
         format!("ROM count: {}", request.entries.len()),
         format!("Image count: {}", image_count),
         format!("Coverflow enabled: {}", coverflow_enabled),
@@ -278,14 +319,16 @@ fn build_firmware_bundle_blocking(
         format!(
             "Stock Bank1 source: {}",
             stock_bank1_candidate
-                .to_string_lossy()
-                .to_string()
+                .as_ref()
+                .map(|path| path.display().to_string())
+                .unwrap_or_else(|| "not used".to_string())
         ),
         format!(
             "Stock SPI source: {}",
             stock_spi_candidate
-                .to_string_lossy()
-                .to_string()
+                .as_ref()
+                .map(|path| path.display().to_string())
+                .unwrap_or_else(|| "not used".to_string())
         ),
         format!(
             "Dualboot Bank1 candidate: {}",
@@ -306,10 +349,20 @@ fn build_firmware_bundle_blocking(
         format!("Expected intflash output: {}", intflash_build_path.display()),
         format!("Expected extflash output: {}", extflash_build_path.display()),
         format!("Extflash built: {}", extflash_built),
-        format!("SPI prefix source: {}", spi_prefix_source.display()),
+        format!(
+            "SPI prefix source: {}",
+            spi_prefix_source
+                .as_ref()
+                .map(|path| path.display().to_string())
+                .unwrap_or_else(|| "none".to_string())
+        ),
         format!("Retro-Go fork extflash payload size: {}", extflash_build_size_bytes),
         format!("Flashable SPI image size: {}", spi_output_size_bytes),
-        "Flashable SPI image includes stock SPI prefix".to_string(),
+        if dual_boot {
+            "Flashable SPI image includes stock SPI prefix".to_string()
+        } else {
+            "Flashable SPI image contains Retro-Go only".to_string()
+        },
         String::new(),
         "Emulators:".to_string(),
     ];
@@ -337,11 +390,12 @@ fn build_firmware_bundle_blocking(
         "bundle_name": bundle_name,
         "firmware_profile": request.firmware_profile,
         "firmware_code": firmware_profile,
+        "dual_boot": dual_boot,
         "installed_spi_mb": request.installed_spi_mb,
         "firmware_reserved_mb": request.firmware_reserved_mb,
         "retro_go_extflash_size_mb": extflash_size_mb,
         "retro_go_extflash_offset_bytes": extflash_offset_bytes,
-        "retro_go_intflash_bank": 2,
+        "retro_go_intflash_bank": if dual_boot { 2 } else { 1 },
         "rom_count": request.entries.len(),
         "image_count": image_count,
         "coverflow_enabled": coverflow_enabled,
@@ -360,8 +414,8 @@ fn build_firmware_bundle_blocking(
         "stock_bank1_source_path": stock_bank1_candidate,
         "stock_spi_source_path": stock_spi_candidate,
         "spi_prefix_source_path": spi_prefix_source,
-        "bank1_dualboot": true,
-        "bank1_dualboot_entry": "LEFT+GAME",
+        "bank1_dualboot": dual_boot,
+        "bank1_dualboot_entry": if dual_boot { Some("LEFT+GAME") } else { None },
         "bank2_candidate_path": bank2_output,
         "extflash_build_path": spi_output,
         "extflash_built": extflash_built,
@@ -393,7 +447,11 @@ fn build_firmware_bundle_blocking(
             &format!("# Flashable Bank2 image: {}", bank2_output_path.display()),
             &format!("# Flashable SPI image: {}", spi_output.display()),
             &format!("# Build log: {}", build_log_path.display()),
-            "# Use GW Studio Flash Console to write Bank1 + Bank2 + SPI.",
+            if dual_boot {
+                "# Use GW Studio Flash Console to write Bank1 + Bank2 + SPI."
+            } else {
+                "# Use GW Studio Flash Console to write Retro-Go Bank1 + SPI."
+            },
             "",
         ]
         .join("\n"),
@@ -402,6 +460,7 @@ fn build_firmware_bundle_blocking(
 
     Ok(BuildBundleResult {
         bundle_dir: bundle_dir.to_string_lossy().to_string(),
+        dual_boot,
         summary_path: summary_path.to_string_lossy().to_string(),
         manifest_path: manifest_path.to_string_lossy().to_string(),
         retro_go_workspace_dir: retro_go_workspace_dir.to_string_lossy().to_string(),

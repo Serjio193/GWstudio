@@ -11,6 +11,7 @@ pub(crate) struct FirmwareBundleLookupResult {
     message: String,
     bundle_dir: String,
     manifest_path: String,
+    dual_boot: bool,
     bank1_candidate_path: String,
     bank2_candidate_path: String,
     extflash_build_path: String,
@@ -65,6 +66,7 @@ pub(crate) fn latest_firmware_bundle() -> Result<FirmwareBundleLookupResult, Str
             message: "No firmware bundle directory exists. Run Build Firmware first.".to_string(),
             bundle_dir: String::new(),
             manifest_path: String::new(),
+            dual_boot: true,
             bank1_candidate_path: String::new(),
             bank2_candidate_path: String::new(),
             extflash_build_path: String::new(),
@@ -110,6 +112,10 @@ pub(crate) fn latest_firmware_bundle() -> Result<FirmwareBundleLookupResult, Str
             .get("spi_full_image")
             .and_then(|value| value.as_bool())
             .unwrap_or(false);
+        let dual_boot = manifest
+            .get("dual_boot")
+            .and_then(|value| value.as_bool())
+            .unwrap_or(true);
         let has_spi_prefix_source = manifest
             .get("spi_prefix_source_path")
             .and_then(|value| value.as_str())
@@ -123,16 +129,22 @@ pub(crate) fn latest_firmware_bundle() -> Result<FirmwareBundleLookupResult, Str
         let bank1_is_dualboot = manifest
             .get("bank1_dualboot")
             .and_then(|value| value.as_bool())
-            .unwrap_or(false)
-            || Path::new(&bank1)
-                .file_name()
-                .and_then(|name| name.to_str())
-                .map(|name| name.eq_ignore_ascii_case("bank1d.bin"))
-                .unwrap_or(false);
-        if bank1.is_empty() || bank2.is_empty() || spi.is_empty() || !bank1_is_dualboot {
+            .unwrap_or_else(|| {
+                Path::new(&bank1)
+                    .file_name()
+                    .and_then(|name| name.to_str())
+                    .map(|name| name.eq_ignore_ascii_case("bank1d.bin"))
+                    .unwrap_or(false)
+            });
+        let required_internal_images_present = if dual_boot {
+            !bank1.is_empty() && !bank2.is_empty() && bank1_is_dualboot
+        } else {
+            !bank1.is_empty() && bank2.is_empty() && !bank1_is_dualboot
+        };
+        if !required_internal_images_present || spi.is_empty() {
             if skipped_reason.is_empty() {
                 skipped_reason = format!(
-                    "Latest bundle is not flashable for dualboot: Bank1={}, Bank2={}, SPI={}, dualboot={}. Rebuild must produce bank1d.bin.",
+                    "Latest bundle is not flashable: Bank1={}, Bank2={}, SPI={}, dualboot={}.",
                     if bank1.is_empty() { "missing" } else { "present" },
                     if bank2.is_empty() { "missing" } else { "present" },
                     if spi.is_empty() { "missing" } else { "present" },
@@ -141,7 +153,7 @@ pub(crate) fn latest_firmware_bundle() -> Result<FirmwareBundleLookupResult, Str
             }
             continue;
         }
-        if !spi_full_image || !has_spi_prefix_source {
+        if !spi_full_image || (dual_boot && !has_spi_prefix_source) {
             if skipped_reason.is_empty() {
                 skipped_reason = "Latest bundle uses old SPI image format. Rebuild firmware to create a patched full flashable SPI image.".to_string();
             }
@@ -149,7 +161,7 @@ pub(crate) fn latest_firmware_bundle() -> Result<FirmwareBundleLookupResult, Str
         }
         let bank1_size = fs::metadata(&bank1).map(|metadata| metadata.len()).unwrap_or(0);
         let expected_bank1_size = if firmware_code == "z" { 128 * 1024 } else { 256 * 1024 };
-        if bank1_size != expected_bank1_size {
+        if dual_boot && bank1_size != expected_bank1_size {
             if skipped_reason.is_empty() {
                 skipped_reason = format!(
                     "Latest bundle has invalid Bank1 size for {}: {} bytes, expected {} bytes.",
@@ -172,9 +184,14 @@ pub(crate) fn latest_firmware_bundle() -> Result<FirmwareBundleLookupResult, Str
             .to_string();
         return Ok(FirmwareBundleLookupResult {
             found: true,
-            message: "Dualboot firmware bundle found.".to_string(),
+            message: if dual_boot {
+                "Dualboot firmware bundle found.".to_string()
+            } else {
+                "Retro-Go-only firmware bundle found.".to_string()
+            },
             bundle_dir,
             manifest_path: manifest_path.to_string_lossy().to_string(),
+            dual_boot,
             bank1_candidate_path: bank1,
             bank2_candidate_path: bank2,
             extflash_build_path: spi,
@@ -196,6 +213,7 @@ pub(crate) fn latest_firmware_bundle() -> Result<FirmwareBundleLookupResult, Str
         message,
         bundle_dir: String::new(),
         manifest_path: String::new(),
+        dual_boot: true,
         bank1_candidate_path: String::new(),
         bank2_candidate_path: String::new(),
         extflash_build_path: String::new(),

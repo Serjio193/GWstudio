@@ -23,17 +23,17 @@ import {
 
 const DEFAULT_APP_VERSION = "0.0.0";
 
-const NEUTRAL_MODE = {
-  name: "Unknown Console",
-  accentText: "text-zinc-400",
-  accentSoftText: "text-zinc-300",
-  accentBg: "bg-zinc-700",
-  accentBgSoft: "bg-zinc-900/35",
-  accentBorder: "border-zinc-700",
-  glow: "rgba(148, 163, 184, 0.16)",
-  grid: "rgba(148, 163, 184, 0.12)",
-  wallGrid: "rgba(148, 163, 184, 0.12)",
-  floorGrid: "rgba(148, 163, 184, 0.28)",
+const RETRO_GO_MODE = {
+  name: "Retro-Go",
+  accentText: "text-amber-500",
+  accentSoftText: "text-amber-300",
+  accentBg: "bg-amber-800",
+  accentBgSoft: "bg-amber-950/35",
+  accentBorder: "border-amber-800",
+  glow: "rgba(180, 83, 9, 0.24)",
+  grid: "rgba(217, 119, 6, 0.14)",
+  wallGrid: "rgba(180, 83, 9, 0.18)",
+  floorGrid: "rgba(217, 119, 6, 0.38)",
   sceneTuning: {
     wallGrid: 1.0,
     floorGrid: 1.0,
@@ -75,6 +75,7 @@ const THUMBNAIL_SOURCES = {
   msx: buildThumbSource("TWljcm9zb2Z0Xy1fTVNY", "MSX"),
   wsv: buildThumbSource("V2F0YXJhXy1fU3VwZXJ2aXNpb24=", "Watara Supervision"),
   a7800: buildThumbSource("QXRhcmlfLV83ODAw", "Atari 7800"),
+  gw: buildThumbSource("SGFuZGhlbGRfRWxlY3Ryb25pY19HYW1l", "Handheld Electronic Game"),
 };
 
 const THUMBNAIL_INDEX_CACHE = new Map();
@@ -539,13 +540,13 @@ function StartupOverlay({ version, sha256, progress, message }) {
   const safeProgress = Math.max(0, Math.min(100, Number(progress ?? 0)));
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(34,197,94,0.18),transparent_42%)]" />
-      <div className="relative flex flex-col items-center rounded-[32px] border border-emerald-400/30 bg-zinc-950/90 px-10 py-9 text-center shadow-[0_0_70px_rgba(16,185,129,0.18)]">
-        <div className="gw-startup-logo flex h-24 w-24 items-center justify-center rounded-[28px] border border-emerald-300/40 bg-emerald-400 text-3xl font-black text-black shadow-[0_0_45px_rgba(52,255,176,0.34)]">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(180,83,9,0.24),transparent_44%)]" />
+      <div className="relative flex flex-col items-center rounded-[32px] border border-amber-800/50 bg-[#120b07]/95 px-10 py-9 text-center shadow-[0_0_70px_rgba(120,53,15,0.28)]">
+        <div className="gw-startup-logo flex h-24 w-24 items-center justify-center rounded-[28px] border border-amber-500/50 bg-amber-800 text-3xl font-black text-amber-50 shadow-[0_0_45px_rgba(180,83,9,0.42)]">
           GW
         </div>
         <div className="mt-7 text-3xl font-black tracking-wide text-white">GW Studio</div>
-        <div className="mt-2 text-sm font-bold uppercase tracking-[0.32em] text-emerald-300">version {version || DEFAULT_APP_VERSION}</div>
+        <div className="mt-2 text-sm font-bold uppercase tracking-[0.32em] text-amber-400">Retro-Go · version {version || DEFAULT_APP_VERSION}</div>
         <div className="mt-5 rounded-2xl border border-zinc-800 bg-black/60 px-5 py-3 font-mono text-xs text-zinc-300">
           SHA256: {shortSha}
         </div>
@@ -554,13 +555,55 @@ function StartupOverlay({ version, sha256, progress, message }) {
             <span>{message || "Preparing runtime"}</span>
             <span>{Math.round(safeProgress)}%</span>
           </div>
-          <div className="h-2 overflow-hidden rounded-full border border-emerald-400/25 bg-black">
+          <div className="h-2 overflow-hidden rounded-full border border-amber-700/40 bg-black">
             <div
-              className="h-full rounded-full bg-emerald-300 shadow-[0_0_18px_rgba(52,255,176,0.65)] transition-[width] duration-200"
+              className="h-full rounded-full bg-amber-600 shadow-[0_0_18px_rgba(217,119,6,0.65)] transition-[width] duration-200"
               style={{ width: `${safeProgress}%` }}
             />
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function SpiCapacityDialog({ mode, t, profile, onSelect, onCancel }) {
+  const choices = [
+    { value: "stock", label: `${t.stockCapacity} (${profile === "Z" ? 4 : 1} MB)` },
+    ...[4, 8, 16, 32, 64, 128, 256].map((value) => ({ value, label: `${value} MB` })),
+  ];
+
+  return (
+    <div className="fixed inset-0 z-[140] flex items-center justify-center bg-black/75 px-6 backdrop-blur-sm">
+      <div className="w-full max-w-xl rounded-[28px] border border-amber-800/60 bg-[#100b08] p-6 shadow-[0_0_60px_rgba(120,53,15,0.35)]">
+        <div className={cx("text-sm font-black uppercase tracking-wide", mode.accentText)}>
+          {t.selectSpiCapacity}
+        </div>
+        <div className="mt-2 text-sm leading-6 text-zinc-400">{t.selectSpiCapacityHint}</div>
+        <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {choices.map((choice) => (
+            <button
+              key={choice.value}
+              type="button"
+              onClick={() => onSelect(choice.value)}
+              className={cx(
+                "rounded-2xl border px-4 py-4 text-center text-sm font-black transition hover:bg-zinc-900",
+                mode.accentBorder,
+                mode.accentBgSoft,
+                mode.accentText,
+              )}
+            >
+              {choice.label}
+            </button>
+          ))}
+        </div>
+        <button
+          type="button"
+          onClick={onCancel}
+          className="mt-4 w-full rounded-2xl border border-zinc-800 bg-black/35 px-5 py-3 text-sm font-bold text-zinc-400 transition hover:border-zinc-600 hover:text-white"
+        >
+          {t.cancel}
+        </button>
       </div>
     </div>
   );
@@ -1388,9 +1431,6 @@ function BuildActionsPanel({
   isDownloadingImages,
   imageDownloadProgress,
   canDownloadImages,
-  isDeviceWritable,
-  isDeviceIdentified,
-  detectedFirmware,
   hasReadDeviceInfo,
   sdEnabled,
   spiUsedMb,
@@ -1405,33 +1445,35 @@ function BuildActionsPanel({
   imageUsedMb,
   romCount,
   imageCount,
+  firmwareInstallMode,
+  firmwareProfile,
+  offlineSpiChoice,
+  onFirmwareInstallModeChange,
+  onSingleHardwareChange,
   onDownloadImages,
   onBuildFirmware,
 }) {
   const spiPercent = spiTotalMb > 0 ? Math.min(100, Math.round((spiUsedMb / spiTotalMb) * 100)) : 0;
   const sdPercent = Math.min(100, Math.round((sdUsedMb / sdTotalMb) * 100));
   const hasBuildSelection = Boolean(selectedEmulator);
-  const hasBuildMetrics = hasReadDeviceInfo;
+  const hasSelectedCapacity = hasReadDeviceInfo || offlineSpiChoice !== null;
+  const hasBuildMetrics = hasSelectedCapacity && spiTotalMb > 0;
   const hasBuiltExtflash = builtExtflashMb > 0;
   const freeMb = hasBuildMetrics ? Math.max(0, spiTotalMb - firmwareBaseMb - emulatorUsedMb) : 0;
   const usedMb = hasBuildMetrics ? firmwareBaseMb + emulatorUsedMb : 0;
   const overflowMb = hasBuildMetrics ? Math.max(0, usedMb - spiTotalMb) : 0;
   const buildOverflowLimitMb = hasBuildMetrics ? spiTotalMb * 1.3 : Infinity;
-  const isBuildOverLimit = hasBuildMetrics && spiTotalMb > 0 && usedMb > buildOverflowLimitMb;
-  const canBuildFirmware = hasLoadedGames && isDeviceWritable && !isBuildOverLimit && !isBuildingFirmware && !isDownloadingImages && isDeviceIdentified;
+  const isBuildOverLimit = hasReadDeviceInfo && hasBuildMetrics && spiTotalMb > 0 && usedMb > buildOverflowLimitMb;
+  const canBuildFirmware = hasLoadedGames && !isBuildOverLimit && !isBuildingFirmware && !isDownloadingImages;
   const buildDisabledReason = !hasLoadedGames
     ? t.loadRomsToBuild
-    : !isDeviceIdentified
-      ? `${t.deviceNotIdentified}: ${detectedFirmware || "UNKNOWN"}`
-      : !isDeviceWritable
-        ? t.protectedDevice
-        : isDownloadingImages
-          ? t.waitImageDownload
-          : isBuildOverLimit
-            ? t.buildTooLarge
-            : isBuildingFirmware
-              ? (buildFirmwareMessage || t.packingBundle)
-              : "";
+    : isDownloadingImages
+      ? t.waitImageDownload
+      : isBuildOverLimit
+        ? t.buildTooLarge
+        : isBuildingFirmware
+          ? (buildFirmwareMessage || t.packingBundle)
+          : "";
   const chartTotalMb = hasBuildMetrics ? Math.max(spiTotalMb, usedMb, 1) : 1;
   const chartSegments = hasBuildMetrics
     ? [
@@ -1451,6 +1493,70 @@ function BuildActionsPanel({
     <Panel className="flex h-full min-h-0 flex-col p-5">
       <div className={cx("mb-4 text-sm font-black uppercase tracking-wide", mode.accentText)}>
         {t.buildOptions}
+      </div>
+      <div className="mb-3 rounded-2xl border border-zinc-900 bg-black/30 p-3">
+        <div className="mb-2 text-[11px] font-black uppercase tracking-wider text-zinc-500">
+          {t.stockFirmwareMode}
+        </div>
+        <div className="grid grid-cols-3 gap-2">
+          {["M", "Z", "NO"].map((value) => (
+            <button
+              key={value}
+              type="button"
+              onClick={() => onFirmwareInstallModeChange(value)}
+              disabled={isBuildingFirmware}
+              className={cx(
+                "rounded-xl border px-3 py-2 text-sm font-black transition",
+                firmwareInstallMode === value
+                  ? value === "M"
+                    ? "border-red-500 bg-red-950/35 text-red-300"
+                    : value === "Z"
+                      ? "border-emerald-500 bg-emerald-950/35 text-emerald-300"
+                      : "border-sky-500 bg-sky-950/35 text-sky-300"
+                  : "border-zinc-800 bg-black/30 text-zinc-500 hover:border-zinc-600 hover:text-zinc-200",
+              )}
+            >
+              {value === "NO" ? "NONE" : value}
+            </button>
+          ))}
+        </div>
+        <div className="mt-2 text-xs text-zinc-500">
+          {firmwareInstallMode === "NO" ? t.retroGoOnlyHint : t.dualBootHint}
+        </div>
+        {firmwareInstallMode === "NO" && (
+          <div className="mt-3">
+            <div className="mb-2 text-[11px] font-black uppercase tracking-wider text-zinc-500">
+              {t.hardwareModel}
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              {["M", "Z"].map((value) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => onSingleHardwareChange(value)}
+                  disabled={isBuildingFirmware}
+                  className={cx(
+                    "rounded-xl border px-3 py-2 text-sm font-black transition",
+                    firmwareProfile === value
+                      ? value === "M"
+                        ? "border-red-500 bg-red-950/35 text-red-300"
+                        : "border-emerald-500 bg-emerald-950/35 text-emerald-300"
+                      : "border-zinc-800 bg-black/30 text-zinc-500 hover:border-zinc-600 hover:text-zinc-200",
+                  )}
+                >
+                  {value === "M" ? t.marioHardware : t.zeldaHardware}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        <div className="mt-3 text-[11px] text-zinc-600">
+          {hasReadDeviceInfo
+            ? t.detectedSpiCapacity.replace("{size}", formatMbValue(spiTotalMb))
+            : offlineSpiChoice !== null
+              ? t.selectedSpiCapacity.replace("{size}", formatMbValue(spiTotalMb))
+              : t.spiCapacityNotSelected}
+        </div>
       </div>
       <div className="grid grid-cols-2 gap-3">
         <button
@@ -1483,7 +1589,7 @@ function BuildActionsPanel({
         </button>
         <button
           type="button"
-          onClick={onBuildFirmware}
+          onClick={() => onBuildFirmware()}
           disabled={!canBuildFirmware}
           className={cx(
             "relative overflow-hidden rounded-2xl border px-4 py-4 text-left transition-all duration-300",
@@ -1510,7 +1616,7 @@ function BuildActionsPanel({
           </div>
           <div className="relative z-10 mt-1 text-xs text-zinc-500">
             {hasBuiltExtflash
-              ? `${t.firmwareBuiltCanFlash}. ${t.retroGoStart}`
+              ? `${t.firmwareBuiltCanFlash}. ${firmwareInstallMode === "NO" ? t.retroGoOnlyStart : t.retroGoStart}`
               : canBuildFirmware
                 ? `${t.packRomsImages}: ${romCount} ROM / ${imageCount} image`
                 : buildDisabledReason}
@@ -1668,6 +1774,8 @@ function FlashPanel({
   advancedFlashEnabled,
   recoveryMode,
   hasCurrentFirmwareBuild,
+  firmwareDualBoot,
+  onOpenFirmwareFolder,
   onAutoFlash,
   onRestoreDevice,
   onRestoreOriginalFirmware,
@@ -1695,7 +1803,11 @@ function FlashPanel({
   const recoveryBank1Ready = Boolean(mcuFirmwareFile);
   const recoverySpiReady = Boolean(spiFirmwareFile);
   const showAdvancedFlash = advancedFlashEnabled || recoveryMode;
-  const canAutoFlash = !recoveryMode && hasCurrentFirmwareBuild && isDeviceWritable && !isDeviceTransferActive && Boolean(spiFirmwareFile && bank2FirmwareFile && mcuFirmwareFile);
+  const canAutoFlash = !recoveryMode
+    && hasCurrentFirmwareBuild
+    && isDeviceWritable
+    && !isDeviceTransferActive
+    && Boolean(spiFirmwareFile && mcuFirmwareFile && (firmwareDualBoot ? bank2FirmwareFile : true));
   const canRestoreOriginalFirmware = isDeviceWritable && !isDeviceTransferActive;
   const canRestoreDevice = isDeviceWritable && !isDeviceTransferActive && (
     recoveryMode ? recoveryBank1Ready && recoverySpiReady : mcuBackupReady && spiBackupReady
@@ -1733,11 +1845,16 @@ function FlashPanel({
   const bank1WriteState = writeButtonState("bank1", t.writeBank1, isDeviceWritable ? t.writeSelectedBank1 : t.protectedDevice);
   const bank2WriteState = writeButtonState("bank2", t.writeBank2, isDeviceWritable ? t.writeBank2Payload : t.protectedDevice);
   const spiWriteState = writeButtonState("spi", t.writeSpiFlash, isDeviceWritable ? t.writeSelectedSpi : t.protectedDevice);
-  const autoRows = [
-    { label: "Bank1", name: hasCurrentFirmwareBuild ? mcuBackupName : "", state: bank1WriteState },
-    { label: "Bank2", name: hasCurrentFirmwareBuild ? bank2Name : "", state: bank2WriteState },
-    { label: "SPI", name: hasCurrentFirmwareBuild ? spiBackupName : "", state: spiWriteState },
-  ];
+  const autoRows = firmwareDualBoot
+    ? [
+        { label: "Bank1", name: hasCurrentFirmwareBuild ? mcuBackupName : "", state: bank1WriteState },
+        { label: "Bank2", name: hasCurrentFirmwareBuild ? bank2Name : "", state: bank2WriteState },
+        { label: "SPI", name: hasCurrentFirmwareBuild ? spiBackupName : "", state: spiWriteState },
+      ]
+    : [
+        { label: "Bank1", name: hasCurrentFirmwareBuild ? mcuBackupName : "", state: bank1WriteState },
+        { label: "SPI", name: hasCurrentFirmwareBuild ? spiBackupName : "", state: spiWriteState },
+      ];
   const restoreRows = flashDisplayRows.length > 0 ? flashDisplayRows.map((row) => ({
     ...row,
     state: row.kind === "bank1" ? bank1WriteState : row.kind === "bank2" ? bank2WriteState : spiWriteState,
@@ -1787,7 +1904,7 @@ function FlashPanel({
         {t.flashDevice}
       </div>
       <div className="mb-4 space-y-3">
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
           <button
             type="button"
             onClick={onAutoFlash}
@@ -1813,16 +1930,16 @@ function FlashPanel({
             </div>
             <div className={cx("relative z-10 mt-1 text-xs", isAutoFlashDone ? "text-emerald-200/80" : "text-zinc-500")}>
               {isAutoFlashRunning
-                ? t.writingBankSpi
+                ? firmwareDualBoot ? t.writingBankSpi : t.writingSingleFirmware
                 : isAutoFlashDone
                   ? t.autoFlashDoneHint
                 : isDeviceWritable
                 ? !hasCurrentFirmwareBuild
                   ? t.buildFirmwareFirst
                   : spiFirmwareFile
-                  ? bank2FirmwareFile && mcuFirmwareFile
-                    ? t.flashStockForkSpi
-                    : bank2FirmwareFile
+                  ? mcuFirmwareFile && (firmwareDualBoot ? bank2FirmwareFile : true)
+                    ? firmwareDualBoot ? t.flashStockForkSpi : t.flashRetroGoOnly
+                    : !mcuFirmwareFile
                       ? t.bank1Missing
                       : t.bank2Missing
                   : t.buildFirmwareFirst
@@ -1982,6 +2099,20 @@ function FlashPanel({
                 ))}
               </div>
             )}
+          </button>
+          <button
+            type="button"
+            onClick={onOpenFirmwareFolder}
+            disabled={!hasCurrentFirmwareBuild}
+            className={cx(
+              "relative overflow-hidden rounded-2xl border px-5 py-4 text-left transition-all duration-300",
+              hasCurrentFirmwareBuild
+                ? cx(mode.accentBorder, mode.accentBgSoft, mode.accentText, "hover:bg-zinc-900")
+                : "cursor-not-allowed border-zinc-900 bg-black/30 text-zinc-600",
+            )}
+          >
+            <div className="relative z-10 text-lg font-black">{t.openFirmwareFolder}</div>
+            <div className="relative z-10 mt-1 text-xs text-zinc-500">{t.openFirmwareFolderHint}</div>
           </button>
         </div>
 
@@ -2392,6 +2523,8 @@ export default function App() {
   const flashProgressLogRef = useRef({ stage: "", bucket: -1 });
   const [modeName, setModeName] = useState("M");
   const [firmwareProfile, setFirmwareProfile] = useState("M");
+  const [firmwareInstallMode, setFirmwareInstallMode] = useState("NO");
+  const [builtFirmwareDualBoot, setBuiltFirmwareDualBoot] = useState(true);
   const [backupDone, setBackupDone] = useState(false);
   const [activeAction, setActiveAction] = useState("backup");
   const [isReadingInfo, setIsReadingInfo] = useState(false);
@@ -2449,6 +2582,8 @@ export default function App() {
   const [msxBiosPrompt, setMsxBiosPrompt] = useState(null);
   const [colecoBiosPrompt, setColecoBiosPrompt] = useState(null);
   const [stockFirmwarePrompt, setStockFirmwarePrompt] = useState(false);
+  const [spiCapacityPrompt, setSpiCapacityPrompt] = useState(false);
+  const [offlineSpiChoice, setOfflineSpiChoice] = useState(null);
   const [pendingStockRestoreProfile, setPendingStockRestoreProfile] = useState(null);
   const [retryBuildAfterMsxBios, setRetryBuildAfterMsxBios] = useState(false);
   const [retryBuildAfterColecoBios, setRetryBuildAfterColecoBios] = useState(false);
@@ -2515,28 +2650,44 @@ export default function App() {
   const [buildFirmwareError, setBuildFirmwareError] = useState("");
   const [builtExtflashBytes, setBuiltExtflashBytes] = useState(0);
   const [builtExtflashSignature, setBuiltExtflashSignature] = useState("");
+  const [builtFirmwareFolder, setBuiltFirmwareFolder] = useState("");
 
   const t = TRANSLATIONS[language] || TRANSLATIONS.ru;
   const sdEnabled = false;
   const detectedFirmwareLabel = formatFirmwareLabel(deviceInfo.detected_firmware);
   const normalizedDetectedFirmware = normalizeFirmwareAlias(deviceInfo.detected_firmware);
   const detectedExternalFlashValue = Number.parseFloat(String(deviceInfo.external_flash ?? "").replace(/[^\d.]/g, ""));
-  const firmwareBaseMb = firmwareProfile === "Z" ? 4 : 1;
+  const hasDetectedSpiCapacity = Number.isFinite(detectedExternalFlashValue) && detectedExternalFlashValue > 0;
+  const isSingleFirmware = firmwareInstallMode === "NO";
+  const firmwareBaseMb = isSingleFirmware ? 0 : firmwareProfile === "Z" ? 4 : 1;
   const firmwareBaseBytes = Math.round(firmwareBaseMb * 1024 * 1024);
-  const spiTotalMb = Number.isFinite(detectedExternalFlashValue) && detectedExternalFlashValue > 0
+  const profileDefaultSpiMb = firmwareProfile === "Z" ? 4 : 1;
+  const offlineSpiMb = offlineSpiChoice === null
+    ? profileDefaultSpiMb
+    : offlineSpiChoice === "stock"
+      ? profileDefaultSpiMb
+      : Number.isFinite(Number(offlineSpiChoice))
+        ? Number(offlineSpiChoice)
+        : profileDefaultSpiMb;
+  const spiTotalMb = hasDetectedSpiCapacity
     ? detectedExternalFlashValue
-    : 0;
+    : offlineSpiMb;
 
   const hasReadDeviceInfo = !isUnknownValue(deviceInfo.detected_firmware) || !isUnknownValue(deviceInfo.external_flash);
   const hasVisualFirmwareProfile = Boolean(normalizedDetectedFirmware);
-  const visualModeName = hasVisualFirmwareProfile ? normalizedDetectedFirmware : null;
-  const mode = visualModeName ? MODES[visualModeName] : NEUTRAL_MODE;
-  const marqueeRgb = visualModeName === "Z" ? "52, 255, 176" : visualModeName === "M" ? "255, 120, 120" : "148, 163, 184";
+  const visualModeName = hasVisualFirmwareProfile
+    ? normalizedDetectedFirmware
+    : firmwareInstallMode === "NO"
+      ? null
+      : firmwareProfile;
+  const displayHardwareProfile = normalizedDetectedFirmware ?? firmwareProfile;
+  const mode = visualModeName ? MODES[visualModeName] : RETRO_GO_MODE;
+  const marqueeRgb = visualModeName === "Z" ? "52, 255, 176" : visualModeName === "M" ? "255, 120, 120" : "180, 83, 9";
   const isZMode = visualModeName === "Z";
   const isZFirmware = firmwareProfile === "Z";
   const firmwareMode = MODES[firmwareProfile];
   const currentSceneTuning = mode.sceneTuning;
-  const currentScreenFrame = visualModeName ? (screenFrames[visualModeName] ?? mode.screenFrame) : mode.screenFrame;
+  const currentScreenFrame = screenFrames[displayHardwareProfile] ?? mode.screenFrame;
   const probeFrequencyHz = probeFrequencyKhz * 1000;
   const hasKnownDeviceUid = isValidDeviceUid(deviceInfo.device_uid);
   const deviceUidIssue = deviceUidErrorText(deviceInfo.device_uid);
@@ -2630,11 +2781,13 @@ export default function App() {
   const romBuildSignature = useMemo(
     () => [
       `coverflow=${coverflowImagesEnabled ? "1" : "0"}`,
+      `layout=${isSingleFirmware ? "single" : "dual"}`,
+      `hardware=${firmwareProfile}`,
       ...loadedGames
         .map((game) => `${game.emulatorId ?? "?"}|${game.path ?? game.title ?? game.id}`)
         .sort(),
     ].join("||"),
-    [loadedGames, coverflowImagesEnabled],
+    [loadedGames, coverflowImagesEnabled, isSingleFirmware, firmwareProfile],
   );
   const romUsedMb = bytesToMb(loadedGames.reduce((sum, game) => sum + Number(game.sizeBytes ?? 0), 0));
   const imageUsedMb = bytesToMb(buildMetrics.imageBytes);
@@ -3019,6 +3172,7 @@ export default function App() {
     if (normalizedDetectedFirmware) {
       setModeName(normalizedDetectedFirmware);
       setFirmwareProfile(normalizedDetectedFirmware);
+      setFirmwareInstallMode((current) => current === "NO" ? current : normalizedDetectedFirmware);
     }
   }, [normalizedDetectedFirmware]);
 
@@ -3648,7 +3802,7 @@ export default function App() {
   }
 
   async function refreshStockBackupLookup(firmware = stockFirmwarePromptProfile ?? stockBackupFirmware) {
-    if (!firmware || !hasKnownDeviceUid) {
+    if (!firmware) {
       return {
         mcu_name: stockMcuBackupFile,
         mcu_path: stockMcuBackupPath,
@@ -3657,7 +3811,7 @@ export default function App() {
       };
     }
     const stockLookup = await safeInvoke("lookup_stock_backups", {
-      request: { device_uid: deviceInfo.device_uid, firmware_profile: firmware },
+      request: { device_uid: hasKnownDeviceUid ? deviceInfo.device_uid : "", firmware_profile: firmware },
     });
     applyStockBackupLookup(stockLookup);
     return stockLookup;
@@ -3701,7 +3855,7 @@ export default function App() {
       setStockFirmwarePrompt(false);
       setRetryBuildAfterStockFirmware(false);
       window.setTimeout(() => {
-        handleBuildFirmware();
+        handleBuildFirmware(offlineSpiChoice);
       }, 50);
     }
     return ready;
@@ -4283,7 +4437,7 @@ export default function App() {
     ]);
   }
 
-  async function handleBuildFirmware() {
+  async function handleBuildFirmware(offlineChoiceOverride = null) {
     if (loadedGames.length === 0) {
       return;
     }
@@ -4291,15 +4445,37 @@ export default function App() {
       setLogs((items) => [...items, "[build] BLOCKED: wait for image download to finish"]);
       return;
     }
-    if (!isDeviceIdentified) {
-      setLogs((items) => [...items, `[build] BLOCKED: ${deviceIdentifyIssue}`]);
+    const selectedOfflineChoice = offlineChoiceOverride ?? offlineSpiChoice;
+    if (!hasDetectedSpiCapacity && offlineChoiceOverride === null) {
+      setBuildFirmwareError("");
+      setSpiCapacityPrompt(true);
+      setLogs((items) => [...items, "[build] Select installed SPI capacity for offline build"]);
+      return;
+    }
+    const buildSpiMb = hasDetectedSpiCapacity
+      ? spiTotalMb
+      : selectedOfflineChoice === "stock"
+        ? profileDefaultSpiMb
+        : Number(selectedOfflineChoice);
+    if (!Number.isFinite(buildSpiMb) || buildSpiMb <= 0 || buildSpiMb > 256) {
+      setBuildFirmwareError("Invalid SPI capacity selected for build");
+      setLogs((items) => [...items, `[build] BLOCKED: invalid SPI capacity ${buildSpiMb}`]);
+      return;
+    }
+    const estimatedBuildMb = firmwareBaseMb + estimatedEmulatorUsedMb;
+    if (!hasDetectedSpiCapacity && estimatedBuildMb > buildSpiMb * 1.3) {
+      const message = t.selectedSpiTooSmall
+        .replace("{required}", formatMbValue(estimatedBuildMb))
+        .replace("{selected}", formatMbValue(buildSpiMb));
+      setBuildFirmwareError(message);
+      setLogs((items) => [...items, `[build] BLOCKED: ${message}`]);
       return;
     }
     let resolvedStockMcuPath = stockMcuBackupPath;
     let resolvedStockSpiPath = stockSpiBackupPath;
     let resolvedStockMcuReady = stockMcuReady;
     let resolvedStockSpiReady = stockSpiReady;
-    if (!stockBackupReady) {
+    if (!isSingleFirmware && !stockBackupReady) {
       try {
         const stockLookup = await refreshStockBackupLookup();
         resolvedStockMcuPath = stockLookup?.mcu_path || null;
@@ -4354,7 +4530,7 @@ export default function App() {
     const imageMb = formatMbValue(imageUsedMb);
     const totalMb = formatMbValue(emulatorUsedMb);
     const requiredMb = formatMbValue(spiUsedMb);
-    const availableMb = formatMbValue(spiTotalMb);
+    const availableMb = formatMbValue(buildSpiMb);
 
     setBuilderSettingsOpen(true);
     setActiveAction("build");
@@ -4370,11 +4546,13 @@ export default function App() {
     setSpiFirmwarePath(null);
     setBuiltExtflashBytes(0);
     setBuiltExtflashSignature("");
+    setBuiltFirmwareFolder("");
     setFlashCompletionStatus(null);
     setFlashResult({ bank1: null, bank2: null, spi: null });
     setLogs((items) => [
       ...items,
       `[build] Preparing firmware build for ${Object.keys(romLibrary).length} emulator(s)`,
+      `[build] Layout: ${isSingleFirmware ? `Retro-Go only (${firmwareProfile} hardware)` : `Dual boot (${firmwareProfile} stock)`}`,
       `[build] ROMs: ${buildMetrics.romCount} file(s) • ${romMb} MB`,
       `[build] Images: ${buildMetrics.imageCount} file(s) • ${imageMb} MB`,
       `[build] Emulator payload: ${totalMb} MB`,
@@ -4386,10 +4564,11 @@ export default function App() {
       const result = await safeInvoke("build_firmware_bundle", {
         request: {
           firmware_profile: firmwareProfile,
-          installed_spi_mb: spiTotalMb,
+          dual_boot: !isSingleFirmware,
+          installed_spi_mb: buildSpiMb,
           firmware_reserved_mb: firmwareBaseMb,
-          stock_bank1_path: resolvedStockMcuPath,
-          stock_spi_path: resolvedStockSpiPath,
+          stock_bank1_path: isSingleFirmware ? null : resolvedStockMcuPath,
+          stock_spi_path: isSingleFirmware ? null : resolvedStockSpiPath,
           coverflow_enabled: coverflowImagesEnabled,
           entries: loadedGames.map((game) => ({
             emulator: game.emulatorId,
@@ -4413,6 +4592,8 @@ export default function App() {
       if (result.bank1_candidate_path || result.bank2_candidate_path || result.extflash_build_path) {
         setFlashResult({ bank1: null, bank2: null, spi: null });
       }
+      setBuiltFirmwareDualBoot(result.dual_boot !== false);
+      setBuiltFirmwareFolder(`${result.bundle_dir}\\firmware`);
       setActiveAction("flash");
       setBuiltExtflashBytes(Number(result.extflash_build_size_bytes ?? 0));
       setBuiltExtflashSignature(romBuildSignature);
@@ -4463,7 +4644,7 @@ export default function App() {
       if (!result?.found) {
         setLogs((items) => [
           ...items,
-          `[flash] No dualboot firmware bundle found${result?.message ? `: ${result.message}` : ""}`,
+          `[flash] No flashable firmware bundle found${result?.message ? `: ${result.message}` : ""}`,
         ]);
         return false;
       }
@@ -4492,6 +4673,8 @@ export default function App() {
         setSpiFirmwareFile(result.extflash_build_path);
         setSpiFirmwarePath(result.extflash_build_path);
       }
+      setBuiltFirmwareDualBoot(result.dual_boot !== false);
+      setBuiltFirmwareFolder(result.bundle_dir ? `${result.bundle_dir}\\firmware` : "");
       setBuiltExtflashBytes(Number(result.extflash_build_size_bytes ?? 0));
       setFlashResult({ bank1: null, bank2: null, spi: null });
       return Boolean(result.extflash_build_path && (result.bank2_candidate_path || result.bank1_candidate_path));
@@ -4507,6 +4690,19 @@ export default function App() {
     }
     primeLatestFirmwareBundle();
   }, [activeAction, mcuFirmwarePath, bank2FirmwarePath, spiFirmwarePath]);
+
+  async function handleOpenFirmwareFolder() {
+    if (!builtFirmwareFolder) {
+      setLogs((items) => [...items, "[build] Firmware folder is unavailable; build firmware first"]);
+      return;
+    }
+    try {
+      await safeInvoke("reveal_path_in_explorer", { request: { path: builtFirmwareFolder } });
+      setLogs((items) => [...items, `[build] Opened firmware folder: ${builtFirmwareFolder}`]);
+    } catch (error) {
+      setLogs((items) => [...items, `[build] Failed to open firmware folder: ${String(error?.message ?? error)}`]);
+    }
+  }
 
   async function handleImagePackPicked(event) {
     const files = Array.from(event.target.files ?? []);
@@ -4640,7 +4836,7 @@ export default function App() {
           setMsxBiosPrompt(null);
           setRetryBuildAfterMsxBios(false);
           window.setTimeout(() => {
-            handleBuildFirmware();
+            handleBuildFirmware(offlineSpiChoice);
           }, 50);
         }
       } catch (error) {
@@ -4675,7 +4871,7 @@ export default function App() {
           setColecoBiosPrompt(null);
           setRetryBuildAfterColecoBios(false);
           window.setTimeout(() => {
-            handleBuildFirmware();
+            handleBuildFirmware(offlineSpiChoice);
           }, 50);
         }
       } catch (error) {
@@ -4919,16 +5115,21 @@ export default function App() {
       spiPath = null;
     }
 
-    if (!spiPath || !bank1Path || !bank2Path) {
+    if (!spiPath || !bank1Path || (builtFirmwareDualBoot && !bank2Path)) {
       setLogs((items) => [...items, "[flash] Auto Flash blocked: current build outputs are incomplete"]);
       return;
     }
 
-    const flashPlan = [
-      ["bank1", bank1Path],
-      ["bank2", bank2Path],
-      ["spi", spiPath],
-    ];
+    const flashPlan = builtFirmwareDualBoot
+      ? [
+          ["bank1", bank1Path],
+          ["bank2", bank2Path],
+          ["spi", spiPath],
+        ]
+      : [
+          ["bank1", bank1Path],
+          ["spi", spiPath],
+        ];
     const displayRows = flashPlan.map(([kind, path]) => ({
       kind,
       label: kind === "bank1" ? "Bank1" : kind === "bank2" ? "Bank2" : "SPI",
@@ -4990,9 +5191,12 @@ export default function App() {
   }
 
   function requestAutoFlash() {
+    const flashTargets = builtFirmwareDualBoot ? "Bank1 + Bank2 + SPI" : "Retro-Go Bank1 + SPI";
     setConfirmAction({
       title: t.flashBuildTitle,
-      message: t.flashBuildConfirm,
+      message: builtFirmwareDualBoot
+        ? t.flashBuildConfirm
+        : t.singleFirmwareFlashConfirm.replace("{hardware}", firmwareProfile).replace("{targets}", flashTargets),
       confirmText: t.flashBuildButton,
       tone: "emerald",
       onConfirm: () => {
@@ -5207,7 +5411,7 @@ export default function App() {
   }
 
   async function handleRestoreOriginalFirmware(profile) {
-    const hardwareLabel = profile === "Z" ? "Zelda" : "Mario";
+    const hardwareLabel = `${profile} Hardware`;
     setOriginalFirmwarePickerOpen(false);
     if (!isDeviceWritable) {
       setLogs((items) => [...items, "[stock-restore] ERROR: device is not writable"]);
@@ -5357,6 +5561,21 @@ export default function App() {
             onCancel={() => setOriginalFirmwarePickerOpen(false)}
           />
         )}
+        {spiCapacityPrompt && (
+          <SpiCapacityDialog
+            mode={mode}
+            t={t}
+            profile={firmwareProfile}
+            onSelect={(choice) => {
+              setOfflineSpiChoice(choice);
+              setSpiCapacityPrompt(false);
+              window.setTimeout(() => {
+                handleBuildFirmware(choice);
+              }, 50);
+            }}
+            onCancel={() => setSpiCapacityPrompt(false)}
+          />
+        )}
         {confirmAction && (
           <ConfirmDialog
             mode={mode}
@@ -5449,13 +5668,13 @@ export default function App() {
               />
               <DeviceMockup
                 mode={mode}
-                modeName={visualModeName}
+                modeName={displayHardwareProfile}
                 builderSettingsOpen={builderSettingsOpen}
                 selectedEmulator={selectedEmulator}
                 selectedGame={selectedGame}
                 sceneTuning={currentSceneTuning}
                 screenFrame={currentScreenFrame}
-                showConsole={Boolean(visualModeName)}
+                showConsole={Boolean(displayHardwareProfile)}
                 readInfoIssue={readInfoIssue}
               />
             </div>
@@ -5488,13 +5707,9 @@ export default function App() {
                 accent
                 mode={mode}
                 tone="purple"
-                disabled={!isDeviceIdentified}
+                disabled={false}
                 active={builderSettingsOpen}
                 onClick={() => {
-                  if (!isDeviceIdentified) {
-                    setLogs((items) => [...items, `[device] Build Emulator blocked: ${deviceIdentifyIssue}`]);
-                    return;
-                  }
                   setBuilderSettingsOpen(!builderSettingsOpen);
                   setActiveAction(builderSettingsOpen ? "backup" : "build");
                   if (builderSettingsOpen) {
@@ -5569,6 +5784,8 @@ export default function App() {
                     advancedFlashEnabled={advancedFlasherEnabled}
                     recoveryMode={recoveryMode}
                     hasCurrentFirmwareBuild={hasCurrentBuiltExtflash}
+                    firmwareDualBoot={builtFirmwareDualBoot}
+                    onOpenFirmwareFolder={handleOpenFirmwareFolder}
                     onAutoFlash={requestAutoFlash}
                     onRestoreDevice={requestRestoreDevice}
                     onRestoreOriginalFirmware={() => setOriginalFirmwarePickerOpen(true)}
@@ -5674,10 +5891,7 @@ export default function App() {
                   isDownloadingImages={isDownloadingImages}
                   imageDownloadProgress={imageDownloadProgress}
                   canDownloadImages={canDownloadImages}
-                  isDeviceWritable={isDeviceWritable}
-                  isDeviceIdentified={isDeviceIdentified}
-                  detectedFirmware={detectedFirmwareLabel}
-                  hasReadDeviceInfo={hasReadDeviceInfo}
+                  hasReadDeviceInfo={hasDetectedSpiCapacity}
                   sdEnabled={sdEnabled}
                   spiUsedMb={spiUsedMb}
                   spiTotalMb={spiTotalMb}
@@ -5691,6 +5905,16 @@ export default function App() {
                   imageUsedMb={imageUsedMb}
                   romCount={buildMetrics.romCount}
                   imageCount={buildMetrics.imageCount}
+                  firmwareInstallMode={firmwareInstallMode}
+                  firmwareProfile={firmwareProfile}
+                  offlineSpiChoice={offlineSpiChoice}
+                  onFirmwareInstallModeChange={(value) => {
+                    setFirmwareInstallMode(value);
+                    if (value === "M" || value === "Z") {
+                      setFirmwareProfile(value);
+                    }
+                  }}
+                  onSingleHardwareChange={setFirmwareProfile}
                   onDownloadImages={handleDownloadImages}
                   onBuildFirmware={handleBuildFirmware}
                 />

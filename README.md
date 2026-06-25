@@ -8,11 +8,14 @@ The program helps read console information, create backups, build a Retro-Go fir
 
 - Reads Game & Watch hardware information through ST-LINK.
 - Saves console backups under the device UID.
-- Builds a dual-boot setup with stock Bank1, Retro-Go fork Bank2, and SPI image.
+- Builds either a dual-boot setup or a Retro-Go-only single firmware.
+- Supports offline firmware builds without connecting a programmer first.
+- Lets offline users select STOCK, 4, 8, 16, 32, 64, 128, or 256 MB external SPI capacity.
+- Exports the generated firmware folder for manual flashing through Raspberry Pi or another programmer.
 - Imports supported ROMs for Retro-Go cores.
 - Downloads optional game menu images from public thumbnail sources.
 - Uses small 96x96 firmware images for the console while keeping UI previews separate.
-- Flashes Bank1, Bank2, and SPI with progress indication.
+- Flashes Bank1, optional Bank2, and SPI with progress indication after the console is identified.
 - Restores the console from UID-based backups.
 - Restores original stock firmware after the user provides matching stock files.
 - Checks GitHub Releases for application updates.
@@ -30,7 +33,7 @@ You must provide your own legally obtained:
 ## Supported System
 
 - Windows 10 or Windows 11 x64.
-- ST-LINK compatible programmer.
+- ST-LINK compatible programmer for backup and flashing through GW Studio.
 - Nintendo Game & Watch Mario or Zelda hardware.
 - Folder path without Cyrillic characters.
 
@@ -40,7 +43,7 @@ The portable release is a single executable. On startup it extracts its bundled 
 
 ### Main Menu
 
-The main screen shows device status, the detected Game & Watch model, and the main workflow buttons: Backup, Build emulator, and Flash device.
+The main screen shows device status, the selected or detected hardware profile, and the main workflow buttons. Build remains available without a connected console; Backup and Flash require device detection.
 
 ![Main Menu](Screenshot/00-main-menu.png)
 
@@ -58,13 +61,13 @@ Save Bank1, Bank2, and SPI backups under the detected console UID before flashin
 
 ### Build Emulator
 
-Import ROMs, download optional menu images, and build the Retro-Go firmware bundle.
+Import ROMs, download optional menu images, and build the Retro-Go firmware bundle. Choose `M`, `Z`, or `NONE`; `NONE` creates a Retro-Go-only image and asks for the hardware profile.
 
 ![Build Emulator](Screenshot/03-build-emulator.png)
 
 ### Flash Device
 
-Flash the prepared Bank1, Bank2, and SPI images with progress indication.
+Flash the prepared Bank1, optional Bank2, and SPI images with progress indication. The firmware output folder can also be opened for manual Raspberry Pi flashing.
 
 ![Flash Device](Screenshot/04-flash-device.png)
 
@@ -113,15 +116,18 @@ This warning appears because the executable is unsigned and new, not because the
 
 ## Basic Workflow
 
-1. Connect ST-LINK to the console.
-2. Start GW Studio.
-3. Press `Read Device Info`.
-4. Create a backup and keep it safe.
-5. Add ROMs.
-6. Optional: press `Download Images` before building if you want images in the Retro-Go menu.
-7. Press `Build Firmware`.
-8. Press `Flash Build` to write Bank1 + Bank2 + SPI.
-9. From stock firmware, press `LEFT + GAME` to start Retro-Go.
+1. Start GW Studio.
+2. Open `Build emulator` and add ROMs.
+3. Choose the firmware layout:
+   - `M` or `Z`: dual boot using matching user-provided stock firmware.
+   - `NONE`: Retro-Go only; choose `M Hardware` or `Z Hardware`.
+4. Optional: press `Download Images` before building if you want images in the Retro-Go menu.
+5. Press `Build Firmware`.
+6. If the console was not read, select the installed external SPI capacity: `STOCK`, `4`, `8`, `16`, `32`, `64`, `128`, or `256 MB`.
+7. For manual Raspberry Pi flashing, open the generated firmware folder from `Flash Device`.
+8. To flash through GW Studio, connect ST-LINK, press `Read Device Info`, create a backup, and use `Flash Build`.
+
+Dual boot writes stock Bank1, Retro-Go Bank2, and SPI. Retro-Go-only mode writes Retro-Go Bank1 and SPI with `INTFLASH_BANK=1` and `EXTFLASH_OFFSET=0`.
 
 If stock firmware files are required and missing, GW Studio asks you to drop the matching original files. The program checks that Mario/Zelda stock files match the selected hardware before saving them.
 
