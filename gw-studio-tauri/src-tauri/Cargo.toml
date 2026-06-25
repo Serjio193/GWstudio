@@ -1,6 +1,6 @@
 [package]
 name = "gw_studio_tauri"
-version = "1.0.13"
+version = "1.0.14"
 description = "GW Studio desktop shell"
 edition = "2021"
 license = "Unlicense"

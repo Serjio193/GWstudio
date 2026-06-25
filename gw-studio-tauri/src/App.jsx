@@ -21,7 +21,7 @@ import {
   parseSha256Text,
 } from "./lib/update";
 
-const DEFAULT_APP_VERSION = "0.0.0";
+const DEFAULT_APP_VERSION = typeof __APP_VERSION__ === "string" ? __APP_VERSION__ : "0.0.0";
 
 const RETRO_GO_MODE = {
   name: "Retro-Go",
@@ -2854,9 +2854,12 @@ export default function App() {
     }
     setIsCheckingUpdate(true);
     try {
-      const response = await fetch(GITHUB_LATEST_RELEASE_API, {
+      const releaseApiUrl = `${GITHUB_LATEST_RELEASE_API}?t=${Date.now()}`;
+      const response = await fetch(releaseApiUrl, {
+        cache: "no-store",
         headers: {
           Accept: "application/vnd.github+json",
+          "Cache-Control": "no-cache",
         },
       });
       if (!response.ok) {
@@ -3059,6 +3062,14 @@ export default function App() {
     let unlistenRuntimeProgress = null;
     let runtimeReadyHandled = false;
 
+    safeInvoke("app_version", {}, () => DEFAULT_APP_VERSION)
+      .then((version) => {
+        if (!cancelled) {
+          setAppVersion(version || DEFAULT_APP_VERSION);
+        }
+      })
+      .catch(() => {});
+
     async function finishStartupStatus(runtimeMessage = "") {
       const startedAt = Date.now();
       const [status, sha, version] = await Promise.all([
@@ -3161,12 +3172,12 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (startupLoading || startupUpdateCheckedRef.current) {
+    if (startupLoading || appVersion === "0.0.0" || startupUpdateCheckedRef.current) {
       return;
     }
     startupUpdateCheckedRef.current = true;
     checkForAppUpdate({ interactive: false });
-  }, [startupLoading]);
+  }, [startupLoading, appVersion]);
 
   useEffect(() => {
     if (normalizedDetectedFirmware) {

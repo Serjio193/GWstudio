@@ -2,6 +2,8 @@
 
 GW Studio is a portable Windows application for Nintendo Game & Watch modding workflows.
 
+Current release: `1.0.14`.
+
 The program helps read console information, create backups, build a Retro-Go firmware bundle, flash the console, and restore firmware from user-owned backups or user-provided stock firmware.
 
 ## What It Does
