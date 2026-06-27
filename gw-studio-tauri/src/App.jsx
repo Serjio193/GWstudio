@@ -1419,6 +1419,135 @@ function GameListPanel({
   );
 }
 
+function MemoryUsageCard({
+  t,
+  hasSelectedCapacity,
+  spiTotalMb,
+  firmwareBaseMb,
+  emulatorUsedMb,
+  builtExtflashMb,
+  romUsedMb,
+  imageUsedMb,
+  className = "",
+}) {
+  const hasBuildMetrics = hasSelectedCapacity && spiTotalMb > 0;
+  const hasBuiltExtflash = builtExtflashMb > 0;
+  const freeMb = hasBuildMetrics ? Math.max(0, spiTotalMb - firmwareBaseMb - emulatorUsedMb) : 0;
+  const usedMb = hasBuildMetrics ? firmwareBaseMb + emulatorUsedMb : 0;
+  const overflowMb = hasBuildMetrics ? Math.max(0, usedMb - spiTotalMb) : 0;
+  const chartTotalMb = hasBuildMetrics ? Math.max(spiTotalMb, usedMb, 1) : 1;
+  const chartSegments = hasBuildMetrics
+    ? [
+        { key: "firmware", label: "FIRMWARE", value: firmwareBaseMb, color: "#ef4444" },
+        { key: "emulator", label: "EMULATOR", value: emulatorUsedMb, color: "#71717a" },
+        { key: "free", label: "FREE", value: freeMb, color: "#65a30d" },
+      ]
+    : [];
+  const metricSegments = chartSegments.map((segment) => ({
+    ...segment,
+    percent: chartTotalMb > 0 ? Math.round((segment.value / chartTotalMb) * 100) : 0,
+  }));
+  const emulatorRomsPercent = chartTotalMb > 0 ? Math.max(0, Math.min(100, (romUsedMb / chartTotalMb) * 100)) : 0;
+  const emulatorImagesPercent = chartTotalMb > 0 ? Math.max(0, Math.min(100, (imageUsedMb / chartTotalMb) * 100)) : 0;
+
+  return (
+    <div className={cx("gw-memory-card rounded-3xl border border-zinc-900 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.04),transparent_58%),linear-gradient(180deg,#080808_0%,#050505_100%)] p-5", className)}>
+      <div className="mb-4 flex items-start justify-between gap-4">
+        <div>
+          <div className="text-[13px] font-black uppercase tracking-[0.18em] text-zinc-300">{t.memoryUsage}</div>
+          {hasBuiltExtflash && (
+            <div className="mt-1.5 text-xs font-bold uppercase tracking-wide text-emerald-400">
+              {t.builtSpiImage}: {formatMbValue(builtExtflashMb)} MB
+            </div>
+          )}
+          {overflowMb > 0 && (
+            <div className="mt-1.5 text-xs font-bold uppercase tracking-wide text-red-400">
+              {t.overflow}: {formatMbValue(overflowMb)} MB
+            </div>
+          )}
+        </div>
+        <div className="text-right">
+          <div className="text-[28px] font-black leading-none text-white">
+            {hasBuildMetrics ? `${formatMbValue(usedMb)} MB` : "—"}
+          </div>
+          <div className="mt-1 text-xs uppercase tracking-wide text-zinc-500">{t.used}</div>
+        </div>
+      </div>
+
+      {hasBuildMetrics ? (
+        <>
+          <div className="space-y-2.5">
+            {metricSegments.map((segment) => (
+              <div key={segment.key} className="rounded-2xl border border-zinc-900 bg-black/35 px-4 py-2.5">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2 text-[12px] uppercase tracking-wide text-zinc-400">
+                    <span className="h-3 w-3 rounded-full" style={{ backgroundColor: segment.color }} />
+                    {segment.key === "emulator" ? t.emulatorRomsImage : segment.label}
+                  </div>
+                  <div className="text-right">
+                    <div className="text-2xl font-black text-zinc-100">{formatMbValue(segment.value)} MB</div>
+                    <div className="text-[12px] uppercase tracking-wide text-zinc-400">{segment.percent}%</div>
+                  </div>
+                </div>
+                <div className="mt-2.5 h-3 overflow-hidden rounded-full border border-zinc-800 bg-black">
+                  {segment.key === "emulator" ? (
+                    <div className="flex h-full w-full">
+                      <div
+                        className="h-full transition-all"
+                        style={{ width: `${emulatorRomsPercent}%`, backgroundColor: "#71717a" }}
+                      />
+                      <div
+                        className="h-full transition-all"
+                        style={{ width: `${emulatorImagesPercent}%`, backgroundColor: "#eab308" }}
+                      />
+                    </div>
+                  ) : (
+                    <div
+                      className="h-full rounded-full transition-all"
+                      style={{ width: `${Math.max(2, segment.percent)}%`, backgroundColor: segment.color }}
+                    />
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-3">
+            <div className="rounded-2xl border border-zinc-900 bg-black/35 px-4 py-2.5">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2 text-[12px] uppercase tracking-wide text-zinc-400">
+                  <span className="h-3 w-3 rounded-full bg-sky-500" />
+                  {t.builtExtflash}
+                </div>
+                <div className="text-right">
+                  <div className="text-2xl font-black text-zinc-100">
+                    {hasBuiltExtflash ? `${formatMbValue(builtExtflashMb)} MB` : "—"}
+                  </div>
+                  <div className="text-[12px] uppercase tracking-wide text-zinc-400">
+                    {hasBuiltExtflash ? t.realSize : t.runBuildFirmware}
+                  </div>
+                </div>
+              </div>
+              <div className="mt-2.5 h-3 overflow-hidden rounded-full border border-zinc-800 bg-black">
+                <div
+                  className="h-full rounded-full bg-sky-500 transition-all"
+                  style={{
+                    width: `${hasBuiltExtflash && chartTotalMb > 0 ? Math.max(2, Math.round((builtExtflashMb / chartTotalMb) * 100)) : 2}%`,
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+        </>
+      ) : (
+        <div className="rounded-[28px] border border-zinc-900 bg-black/30 p-6 text-center text-sm text-zinc-500">
+          {t.readDeviceInfoMemory}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function BuildActionsPanel({
   t,
   mode,
@@ -1459,9 +1588,7 @@ function BuildActionsPanel({
   const hasSelectedCapacity = hasReadDeviceInfo || offlineSpiChoice !== null;
   const hasBuildMetrics = hasSelectedCapacity && spiTotalMb > 0;
   const hasBuiltExtflash = builtExtflashMb > 0;
-  const freeMb = hasBuildMetrics ? Math.max(0, spiTotalMb - firmwareBaseMb - emulatorUsedMb) : 0;
   const usedMb = hasBuildMetrics ? firmwareBaseMb + emulatorUsedMb : 0;
-  const overflowMb = hasBuildMetrics ? Math.max(0, usedMb - spiTotalMb) : 0;
   const buildOverflowLimitMb = hasBuildMetrics ? spiTotalMb * 1.3 : Infinity;
   const isBuildOverLimit = hasReadDeviceInfo && hasBuildMetrics && spiTotalMb > 0 && usedMb > buildOverflowLimitMb;
   const canBuildFirmware = hasLoadedGames && !isBuildOverLimit && !isBuildingFirmware && !isDownloadingImages;
@@ -1474,21 +1601,6 @@ function BuildActionsPanel({
         : isBuildingFirmware
           ? (buildFirmwareMessage || t.packingBundle)
           : "";
-  const chartTotalMb = hasBuildMetrics ? Math.max(spiTotalMb, usedMb, 1) : 1;
-  const chartSegments = hasBuildMetrics
-    ? [
-        { key: "firmware", label: "FIRMWARE", value: firmwareBaseMb, color: "#ef4444" },
-        { key: "emulator", label: "EMULATOR", value: emulatorUsedMb, color: "#71717a" },
-        { key: "free", label: "FREE", value: freeMb, color: "#65a30d" },
-      ]
-    : [];
-  const metricSegments = chartSegments.map((segment) => ({
-    ...segment,
-    percent: chartTotalMb > 0 ? Math.round((segment.value / chartTotalMb) * 100) : 0,
-  }));
-  const emulatorRomsPercent = chartTotalMb > 0 ? Math.max(0, Math.min(100, (romUsedMb / chartTotalMb) * 100)) : 0;
-  const emulatorImagesPercent = chartTotalMb > 0 ? Math.max(0, Math.min(100, (imageUsedMb / chartTotalMb) * 100)) : 0;
-
   return (
     <Panel className="flex h-full min-h-0 flex-col p-5">
       <div className={cx("mb-4 text-sm font-black uppercase tracking-wide", mode.accentText)}>
@@ -1644,101 +1756,6 @@ function BuildActionsPanel({
       )}
 
       <div className="gw-build-details mt-6 min-h-0 flex-1 space-y-5 overflow-y-auto pr-1">
-        <div className="gw-memory-card rounded-3xl border border-zinc-900 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.04),transparent_58%),linear-gradient(180deg,#080808_0%,#050505_100%)] p-5">
-          <div className="mb-4 flex items-start justify-between gap-4">
-            <div>
-              <div className="text-[13px] font-black uppercase tracking-[0.18em] text-zinc-300">{t.memoryUsage}</div>
-              {hasBuiltExtflash && (
-                <div className="mt-1.5 text-xs font-bold uppercase tracking-wide text-emerald-400">
-                  {t.builtSpiImage}: {formatMbValue(builtExtflashMb)} MB
-                </div>
-              )}
-              {overflowMb > 0 && (
-                <div className="mt-1.5 text-xs font-bold uppercase tracking-wide text-red-400">
-                  {t.overflow}: {formatMbValue(overflowMb)} MB
-                </div>
-              )}
-            </div>
-            <div className="text-right">
-              <div className="text-[28px] font-black leading-none text-white">
-                {hasBuildMetrics ? `${formatMbValue(usedMb)} MB` : "—"}
-              </div>
-              <div className="mt-1 text-xs uppercase tracking-wide text-zinc-500">{t.used}</div>
-            </div>
-          </div>
-
-          {hasBuildMetrics ? (
-            <>
-              <div className="space-y-2.5">
-                {metricSegments.map((segment) => (
-                  <div key={segment.key} className="rounded-2xl border border-zinc-900 bg-black/35 px-4 py-2.5">
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="flex items-center gap-2 text-[12px] uppercase tracking-wide text-zinc-400">
-                        <span className="h-3 w-3 rounded-full" style={{ backgroundColor: segment.color }} />
-                        {segment.key === "emulator" ? t.emulatorRomsImage : segment.label}
-                      </div>
-                      <div className="text-right">
-                        <div className="text-2xl font-black text-zinc-100">{formatMbValue(segment.value)} MB</div>
-                        <div className="text-[12px] uppercase tracking-wide text-zinc-400">{segment.percent}%</div>
-                      </div>
-                    </div>
-                    <div className="mt-2.5 h-3 overflow-hidden rounded-full border border-zinc-800 bg-black">
-                      {segment.key === "emulator" ? (
-                        <div className="flex h-full w-full">
-                          <div
-                            className="h-full transition-all"
-                            style={{ width: `${emulatorRomsPercent}%`, backgroundColor: "#71717a" }}
-                          />
-                          <div
-                            className="h-full transition-all"
-                            style={{ width: `${emulatorImagesPercent}%`, backgroundColor: "#eab308" }}
-                          />
-                        </div>
-                      ) : (
-                        <div
-                          className="h-full rounded-full transition-all"
-                          style={{ width: `${Math.max(2, segment.percent)}%`, backgroundColor: segment.color }}
-                        />
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <div className="mt-3">
-                <div className="rounded-2xl border border-zinc-900 bg-black/35 px-4 py-2.5">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-2 text-[12px] uppercase tracking-wide text-zinc-400">
-                      <span className="h-3 w-3 rounded-full bg-sky-500" />
-                      {t.builtExtflash}
-                    </div>
-                    <div className="text-right">
-                      <div className="text-2xl font-black text-zinc-100">
-                        {hasBuiltExtflash ? `${formatMbValue(builtExtflashMb)} MB` : "—"}
-                      </div>
-                      <div className="text-[12px] uppercase tracking-wide text-zinc-400">
-                        {hasBuiltExtflash ? t.realSize : t.runBuildFirmware}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="mt-2.5 h-3 overflow-hidden rounded-full border border-zinc-800 bg-black">
-                    <div
-                      className="h-full rounded-full bg-sky-500 transition-all"
-                      style={{
-                        width: `${hasBuiltExtflash && chartTotalMb > 0 ? Math.max(2, Math.round((builtExtflashMb / chartTotalMb) * 100)) : 2}%`,
-                      }}
-                    />
-                  </div>
-                </div>
-              </div>
-            </>
-          ) : (
-            <div className="rounded-[28px] border border-zinc-900 bg-black/30 p-6 text-center text-sm text-zinc-500">
-              {t.readDeviceInfoMemory}
-            </div>
-          )}
-        </div>
-
         {sdEnabled && (
           <div>
             <div className="mb-2 flex justify-between text-xs">
@@ -5667,7 +5684,7 @@ export default function App() {
 
         <div className="overflow-y-auto overflow-x-hidden px-5 pb-6" style={{ background: `radial-gradient(circle at top, ${mode.glow}, transparent 44%)` }}>
           <div className="grid auto-rows-max gap-4 py-4">
-            <div className="grid grid-cols-[minmax(280px,360px)_minmax(520px,1fr)] items-stretch gap-4">
+            <div className="gw-top-grid grid grid-cols-[minmax(280px,360px)_minmax(260px,340px)_minmax(360px,1fr)] items-stretch gap-4">
               <DeviceStatus
                 mode={mode}
                 t={t}
@@ -5676,6 +5693,17 @@ export default function App() {
                 readInfoProgress={readInfoProgress}
                 deviceInfo={deviceInfo}
                 showUidWarning={hasReadDeviceInfo}
+              />
+              <MemoryUsageCard
+                t={t}
+                hasSelectedCapacity={hasDetectedSpiCapacity || offlineSpiChoice !== null}
+                spiTotalMb={spiTotalMb}
+                firmwareBaseMb={firmwareBaseMb}
+                emulatorUsedMb={emulatorUsedMb}
+                builtExtflashMb={hasCurrentBuiltExtflash ? builtExtflashMb : 0}
+                romUsedMb={romUsedMb}
+                imageUsedMb={imageUsedMb}
+                className="h-full"
               />
               <DeviceMockup
                 mode={mode}
