@@ -2902,14 +2902,19 @@ export default function App() {
         throw new Error(`latest release does not contain ${RELEASE_SHA256_ASSET_NAME}`);
       }
 
-      let expectedSha = "";
+      let expectedSha = parseSha256Text(exeAsset.digest || shaAsset.digest || "");
       try {
-        const shaResponse = await fetch(shaAsset.browser_download_url);
-        if (shaResponse.ok) {
+        if (!expectedSha) {
+          const shaResponse = await fetch(shaAsset.browser_download_url, { cache: "no-store" });
+          if (!shaResponse.ok) {
+            throw new Error(`SHA256 asset HTTP ${shaResponse.status}`);
+          }
           expectedSha = parseSha256Text(await shaResponse.text());
         }
-      } catch {
-        expectedSha = "";
+      } catch (error) {
+        if (!expectedSha) {
+          throw error;
+        }
       }
       if (!/^[a-f0-9]{64}$/i.test(expectedSha)) {
         throw new Error("latest release SHA256 asset is invalid");
