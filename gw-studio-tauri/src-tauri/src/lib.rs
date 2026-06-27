@@ -45,7 +45,7 @@ use runtime::{
 };
 use service_bridge::start_service_bridge_listener;
 use updater::{
-    app_sha256, cleanup_stale_update_dir, handle_update_helper_args, install_app_update,
+    app_sha256, check_app_update, cleanup_stale_update_dir, handle_update_helper_args, install_app_update,
     open_external_url,
 };
 use file_picker::{read_binary_file, reveal_path_in_explorer, select_bin_file};
@@ -126,6 +126,7 @@ pub fn run() {
             runtime_status,
             app_version,
             app_sha256,
+            check_app_update,
             open_external_url,
             install_app_update,
             load_thumbnail_cache,

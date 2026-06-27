@@ -1,7 +1,7 @@
 use crate::paths::host_root;
 use base64::Engine;
 use ed25519_dalek::{Signature, Verifier, VerifyingKey};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256, Sha512};
 use std::fs;
 #[cfg(target_os = "windows")]
@@ -11,7 +11,7 @@ use std::os::windows::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 #[cfg(target_os = "windows")]
 use windows::core::PCWSTR;
 #[cfg(target_os = "windows")]
@@ -41,10 +41,42 @@ pub(crate) struct AppUpdateInstallRequest {
     version: String,
 }
 
+#[derive(Deserialize)]
+pub(crate) struct AppUpdateCheckRequest {
+    current_version: String,
+}
+
+#[derive(Serialize)]
+pub(crate) struct AppUpdateCheckResult {
+    version: String,
+    download_url: String,
+    signature_url: String,
+    sha256: String,
+    release_url: String,
+    is_newer: bool,
+}
+
+#[derive(Deserialize)]
+struct GithubReleaseAsset {
+    name: Option<String>,
+    browser_download_url: Option<String>,
+    digest: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct GithubLatestRelease {
+    tag_name: Option<String>,
+    name: Option<String>,
+    html_url: Option<String>,
+    assets: Option<Vec<GithubReleaseAsset>>,
+}
+
 const RELEASE_SIGNATURE_NAMESPACE: &str = "gwstudio-release";
 const RELEASE_PUBLIC_KEY_B64: &str = "AAAAC3NzaC1lZDI1NTE5AAAAIOhA2J9ebY5gZfLfMJ+0uFEBL/QFWab74GLqEG6nOq3u";
 const RELEASE_EXE_ASSET_NAME: &str = "GWStudio.exe";
+const RELEASE_SHA256_ASSET_NAME: &str = "GWStudio.exe.sha256";
 const RELEASE_SIGNATURE_ASSET_NAME: &str = "GWStudio.exe.sig";
+const GITHUB_LATEST_RELEASE_API: &str = "https://api.github.com/repos/Serjio193/GWstudio/releases/latest";
 
 fn hide_command_window(command: &mut Command) -> &mut Command {
     #[cfg(target_os = "windows")]
@@ -155,6 +187,91 @@ fn allowed_update_exe_url(url: &str) -> bool {
 
 fn allowed_update_signature_url(url: &str) -> bool {
     allowed_update_download_url(url) && update_url_file_name(url).eq_ignore_ascii_case(RELEASE_SIGNATURE_ASSET_NAME)
+}
+
+fn parse_version(value: &str) -> Vec<u64> {
+    value
+        .trim()
+        .trim_start_matches(|ch| ch == 'v' || ch == 'V')
+        .split(|ch: char| !ch.is_ascii_digit())
+        .filter(|part| !part.is_empty())
+        .filter_map(|part| part.parse::<u64>().ok())
+        .collect()
+}
+
+fn compare_versions(left: &str, right: &str) -> std::cmp::Ordering {
+    let left_parts = parse_version(left);
+    let right_parts = parse_version(right);
+    let len = left_parts.len().max(right_parts.len()).max(3);
+    for index in 0..len {
+        let left_value = left_parts.get(index).copied().unwrap_or(0);
+        let right_value = right_parts.get(index).copied().unwrap_or(0);
+        match left_value.cmp(&right_value) {
+            std::cmp::Ordering::Equal => {}
+            ordering => return ordering,
+        }
+    }
+    std::cmp::Ordering::Equal
+}
+
+fn parse_sha256_text(text: &str) -> Option<String> {
+    text.split(|ch: char| !ch.is_ascii_hexdigit())
+        .find(|part| part.len() == 64 && part.chars().all(|ch| ch.is_ascii_hexdigit()))
+        .map(|part| part.to_ascii_lowercase())
+}
+
+fn github_latest_release_url() -> String {
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_millis())
+        .unwrap_or(0);
+    format!("{GITHUB_LATEST_RELEASE_API}?t={timestamp}")
+}
+
+fn powershell_json_string(value: &str) -> String {
+    let escaped = value.replace('`', "``").replace('"', "`\"");
+    format!("\"{escaped}\"")
+}
+
+fn fetch_latest_release_json() -> Result<String, String> {
+    let url = github_latest_release_url();
+    let command_text = format!(
+        "$ProgressPreference='SilentlyContinue'; \
+         $headers=@{{Accept='application/vnd.github+json';'Cache-Control'='no-cache';'User-Agent'='GWStudio-Updater'}}; \
+         Invoke-RestMethod -Headers $headers -Uri {} | ConvertTo-Json -Depth 20 -Compress",
+        powershell_json_string(&url)
+    );
+    let mut command = Command::new("powershell");
+    command
+        .arg("-NoProfile")
+        .arg("-ExecutionPolicy")
+        .arg("Bypass")
+        .arg("-Command")
+        .arg(command_text)
+        .stdin(Stdio::null())
+        .stderr(Stdio::piped())
+        .stdout(Stdio::piped());
+    let output = hide_command_window(&mut command)
+        .output()
+        .map_err(|error| format!("failed to start update metadata request: {error}"))?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        return Err(if stderr.is_empty() {
+            format!("update metadata request failed with status {}", output.status)
+        } else {
+            format!("update metadata request failed: {stderr}")
+        });
+    }
+    String::from_utf8(output.stdout).map_err(|error| format!("update metadata is not UTF-8: {error}"))
+}
+
+fn find_release_asset<'a>(
+    assets: &'a [GithubReleaseAsset],
+    name: &str,
+) -> Option<&'a GithubReleaseAsset> {
+    assets
+        .iter()
+        .find(|asset| asset.name.as_deref().unwrap_or_default().eq_ignore_ascii_case(name))
 }
 
 fn read_ssh_u32(bytes: &[u8], offset: &mut usize) -> Result<u32, String> {
@@ -407,6 +524,100 @@ pub(crate) fn app_sha256() -> Result<String, String> {
     let bytes = fs::read(&exe_path)
         .map_err(|error| format!("failed to read current exe {}: {error}", exe_path.display()))?;
     Ok(format!("{:x}", Sha256::digest(&bytes)))
+}
+
+#[tauri::command]
+pub(crate) async fn check_app_update(
+    request: AppUpdateCheckRequest,
+) -> Result<AppUpdateCheckResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let release_json = fetch_latest_release_json()?;
+        let release: GithubLatestRelease = serde_json::from_str(&release_json)
+            .map_err(|error| format!("failed to parse update metadata: {error}"))?;
+        let latest_version = release
+            .tag_name
+            .or(release.name)
+            .unwrap_or_default()
+            .trim()
+            .trim_start_matches(|ch| ch == 'v' || ch == 'V')
+            .to_string();
+        if latest_version.is_empty() {
+            return Err("latest release version is empty".to_string());
+        }
+
+        let assets = release.assets.unwrap_or_default();
+        let exe_asset = find_release_asset(&assets, RELEASE_EXE_ASSET_NAME)
+            .ok_or_else(|| format!("latest release does not contain {RELEASE_EXE_ASSET_NAME}"))?;
+        let sha_asset = find_release_asset(&assets, RELEASE_SHA256_ASSET_NAME)
+            .ok_or_else(|| format!("latest release does not contain {RELEASE_SHA256_ASSET_NAME}"))?;
+        let sig_asset = find_release_asset(&assets, RELEASE_SIGNATURE_ASSET_NAME)
+            .ok_or_else(|| format!("latest release does not contain {RELEASE_SIGNATURE_ASSET_NAME}"))?;
+
+        let download_url = exe_asset
+            .browser_download_url
+            .as_deref()
+            .unwrap_or_default()
+            .trim()
+            .to_string();
+        let signature_url = sig_asset
+            .browser_download_url
+            .as_deref()
+            .unwrap_or_default()
+            .trim()
+            .to_string();
+        if !allowed_update_exe_url(&download_url) {
+            return Err("latest release executable URL is not allowed".to_string());
+        }
+        if !allowed_update_signature_url(&signature_url) {
+            return Err("latest release signature URL is not allowed".to_string());
+        }
+
+        let mut sha256 = exe_asset
+            .digest
+            .as_deref()
+            .and_then(parse_sha256_text)
+            .or_else(|| sha_asset.digest.as_deref().and_then(parse_sha256_text))
+            .unwrap_or_default();
+        if sha256.is_empty() {
+            let sha_url = sha_asset
+                .browser_download_url
+                .as_deref()
+                .unwrap_or_default()
+                .trim();
+            if !allowed_update_download_url(sha_url)
+                || !update_url_file_name(sha_url).eq_ignore_ascii_case(RELEASE_SHA256_ASSET_NAME)
+            {
+                return Err("latest release SHA256 URL is not allowed".to_string());
+            }
+            let update_dir = host_root().join("GWStudioUpdate");
+            fs::create_dir_all(&update_dir).map_err(|error| {
+                format!("failed to create update dir {}: {error}", update_dir.display())
+            })?;
+            let sha_path = update_dir.join("latest-update.sha256");
+            download_file(sha_url, &sha_path)?;
+            let sha_text = fs::read_to_string(&sha_path)
+                .map_err(|error| format!("failed to read downloaded SHA256 asset: {error}"))?;
+            sha256 = parse_sha256_text(&sha_text)
+                .ok_or_else(|| "latest release SHA256 asset is invalid".to_string())?;
+        }
+        if sha256.len() != 64 || !sha256.chars().all(|ch| ch.is_ascii_hexdigit()) {
+            return Err("latest release SHA256 asset is invalid".to_string());
+        }
+
+        Ok(AppUpdateCheckResult {
+            version: latest_version.clone(),
+            download_url,
+            signature_url,
+            sha256,
+            release_url: release.html_url.unwrap_or_else(|| {
+                "https://github.com/Serjio193/GWstudio".to_string()
+            }),
+            is_newer: compare_versions(&latest_version, &request.current_version)
+                == std::cmp::Ordering::Greater,
+        })
+    })
+    .await
+    .map_err(|error| format!("failed to join update check task: {error}"))?
 }
 
 #[tauri::command]

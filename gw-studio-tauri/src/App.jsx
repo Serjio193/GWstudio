@@ -2871,69 +2871,96 @@ export default function App() {
     }
     setIsCheckingUpdate(true);
     try {
-      const releaseApiUrl = `${GITHUB_LATEST_RELEASE_API}?t=${Date.now()}`;
-      const response = await fetch(releaseApiUrl, {
-        cache: "no-store",
-        headers: {
-          Accept: "application/vnd.github+json",
-          "Cache-Control": "no-cache",
-        },
-      });
-      if (!response.ok) {
-        throw new Error(`GitHub API ${response.status}`);
-      }
-      const release = await response.json();
-      const latestVersion = String(release.tag_name || release.name || "").replace(/^v/i, "");
-      const assets = Array.isArray(release.assets) ? release.assets : [];
-      const exeAssetName = RELEASE_EXE_ASSET_NAME.toLowerCase();
-      const shaAssetName = RELEASE_SHA256_ASSET_NAME.toLowerCase();
-      const sigAssetName = RELEASE_SIGNATURE_ASSET_NAME.toLowerCase();
-      const exeAsset = assets.find((asset) => String(asset.name ?? "").toLowerCase() === exeAssetName);
-      const shaAsset = assets.find((asset) => String(asset.name ?? "").toLowerCase() === shaAssetName);
-      const sigAsset = assets.find((asset) => String(asset.name ?? "").toLowerCase() === sigAssetName);
-
-      if (!latestVersion || !exeAsset?.browser_download_url) {
-        throw new Error(`latest release does not contain ${RELEASE_EXE_ASSET_NAME}`);
-      }
-      if (!sigAsset?.browser_download_url) {
-        throw new Error(`latest release does not contain ${RELEASE_SIGNATURE_ASSET_NAME}`);
-      }
-      if (!shaAsset?.browser_download_url) {
-        throw new Error(`latest release does not contain ${RELEASE_SHA256_ASSET_NAME}`);
-      }
-
-      let expectedSha = parseSha256Text(exeAsset.digest || shaAsset.digest || "");
+      let latestInfo = null;
+      let isNewer = false;
       try {
-        if (!expectedSha) {
-          const shaResponse = await fetch(shaAsset.browser_download_url, { cache: "no-store" });
-          if (!shaResponse.ok) {
-            throw new Error(`SHA256 asset HTTP ${shaResponse.status}`);
-          }
-          expectedSha = parseSha256Text(await shaResponse.text());
+        const backendInfo = await safeInvoke("check_app_update", {
+          request: { current_version: appVersion },
+        });
+        latestInfo = {
+          version: String(backendInfo?.version ?? ""),
+          downloadUrl: backendInfo?.download_url ?? backendInfo?.downloadUrl ?? "",
+          signatureUrl: backendInfo?.signature_url ?? backendInfo?.signatureUrl ?? "",
+          sha256: backendInfo?.sha256 ?? "",
+          releaseUrl: backendInfo?.release_url ?? backendInfo?.releaseUrl ?? GITHUB_REPOSITORY_URL,
+        };
+        if (!latestInfo.version || !latestInfo.downloadUrl || !latestInfo.signatureUrl) {
+          throw new Error("backend update metadata is incomplete");
         }
-      } catch (error) {
-        if (!expectedSha) {
-          throw error;
+        if (!/^[a-f0-9]{64}$/i.test(latestInfo.sha256)) {
+          throw new Error("backend update SHA256 is invalid");
         }
-      }
-      if (!/^[a-f0-9]{64}$/i.test(expectedSha)) {
-        throw new Error("latest release SHA256 asset is invalid");
+        isNewer = Boolean(backendInfo?.is_newer ?? backendInfo?.isNewer)
+          && compareVersions(latestInfo.version, appVersion) > 0;
+      } catch (backendError) {
+        setLogs((items) => [...items, `[update] Backend check failed, using WebView fallback: ${String(backendError?.message ?? backendError)}`]);
       }
 
-      const latestInfo = {
-        version: latestVersion,
-        downloadUrl: exeAsset.browser_download_url,
-        signatureUrl: sigAsset.browser_download_url,
-        sha256: expectedSha,
-        releaseUrl: release.html_url || GITHUB_REPOSITORY_URL,
-      };
-      const isNewer = compareVersions(latestVersion, appVersion) > 0;
+      if (!latestInfo) {
+        const releaseApiUrl = `${GITHUB_LATEST_RELEASE_API}?t=${Date.now()}`;
+        const response = await fetch(releaseApiUrl, {
+          cache: "no-store",
+          headers: {
+            Accept: "application/vnd.github+json",
+            "Cache-Control": "no-cache",
+          },
+        });
+        if (!response.ok) {
+          throw new Error(`GitHub API ${response.status}`);
+        }
+        const release = await response.json();
+        const latestVersion = String(release.tag_name || release.name || "").replace(/^v/i, "");
+        const assets = Array.isArray(release.assets) ? release.assets : [];
+        const exeAssetName = RELEASE_EXE_ASSET_NAME.toLowerCase();
+        const shaAssetName = RELEASE_SHA256_ASSET_NAME.toLowerCase();
+        const sigAssetName = RELEASE_SIGNATURE_ASSET_NAME.toLowerCase();
+        const exeAsset = assets.find((asset) => String(asset.name ?? "").toLowerCase() === exeAssetName);
+        const shaAsset = assets.find((asset) => String(asset.name ?? "").toLowerCase() === shaAssetName);
+        const sigAsset = assets.find((asset) => String(asset.name ?? "").toLowerCase() === sigAssetName);
+
+        if (!latestVersion || !exeAsset?.browser_download_url) {
+          throw new Error(`latest release does not contain ${RELEASE_EXE_ASSET_NAME}`);
+        }
+        if (!sigAsset?.browser_download_url) {
+          throw new Error(`latest release does not contain ${RELEASE_SIGNATURE_ASSET_NAME}`);
+        }
+        if (!shaAsset?.browser_download_url) {
+          throw new Error(`latest release does not contain ${RELEASE_SHA256_ASSET_NAME}`);
+        }
+
+        let expectedSha = parseSha256Text(exeAsset.digest || shaAsset.digest || "");
+        try {
+          if (!expectedSha) {
+            const shaResponse = await fetch(shaAsset.browser_download_url, { cache: "no-store" });
+            if (!shaResponse.ok) {
+              throw new Error(`SHA256 asset HTTP ${shaResponse.status}`);
+            }
+            expectedSha = parseSha256Text(await shaResponse.text());
+          }
+        } catch (error) {
+          if (!expectedSha) {
+            throw error;
+          }
+        }
+        if (!/^[a-f0-9]{64}$/i.test(expectedSha)) {
+          throw new Error("latest release SHA256 asset is invalid");
+        }
+
+        latestInfo = {
+          version: latestVersion,
+          downloadUrl: exeAsset.browser_download_url,
+          signatureUrl: sigAsset.browser_download_url,
+          sha256: expectedSha,
+          releaseUrl: release.html_url || GITHUB_REPOSITORY_URL,
+        };
+        isNewer = compareVersions(latestVersion, appVersion) > 0;
+      }
       setUpdateAvailable(isNewer);
       setUpdateInfo(isNewer ? latestInfo : null);
       setLogs((items) => [
         ...items,
         isNewer
-          ? `[update] Available: ${appVersion} -> ${latestVersion}`
+          ? `[update] Available: ${appVersion} -> ${latestInfo.version}`
           : `[update] Current version is up to date (${appVersion})`,
       ]);
 

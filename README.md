@@ -2,7 +2,7 @@
 
 GW Studio is a portable Windows application for Nintendo Game & Watch modding workflows.
 
-Current release: `1.0.17`.
+Current release: `1.0.18`.
 
 The program helps read console information, create backups, build a Retro-Go firmware bundle, flash the console, and restore firmware from user-owned backups or user-provided stock firmware.
 
@@ -14,6 +14,7 @@ The program helps read console information, create backups, build a Retro-Go fir
 - Supports offline firmware builds without connecting a programmer first.
 - Shows memory usage between console status and the console preview for faster build checks.
 - Updates M/Z console screenshot frame alignment.
+- Moves update metadata checks into the Tauri backend so WebView cache/CORS does not hide new releases.
 - Reads update SHA256 from GitHub release asset metadata before falling back to the `.sha256` download.
 - Lets offline users select STOCK, 4, 8, 16, 32, 64, 128, or 256 MB external SPI capacity.
 - Exports the generated firmware folder for manual flashing through Raspberry Pi or another programmer.
